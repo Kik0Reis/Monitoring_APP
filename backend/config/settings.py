@@ -44,7 +44,7 @@ INSTALLED_APPS = [
     "countries",
     "customers",
     "locations",
-    "cameras",
+    "devices",
     "mqtt",
     "monitoring",
 ]
@@ -129,3 +129,15 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = 'static/'
+
+
+#Change this when i add authentication
+
+REST_FRAMEWORK = {
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.AllowAny",
+    ],
+    "DEFAULT_RENDERER_CLASSES": [
+        "rest_framework.renderers.JSONRenderer",
+    ],
+}
