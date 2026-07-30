@@ -1,0 +1,17 @@
+from rest_framework.routers import DefaultRouter
+
+from countries.views import CountryViewSet
+from customers.views import CustomerViewSet
+from locations.views import LocationViewSet
+from devices.views import DeviceViewSet
+
+router = DefaultRouter()
+
+# All the endpoints for the API are registered here. The router will automatically generate the URL patterns for each viewset.
+
+router.register("countries", CountryViewSet)
+router.register("customers", CustomerViewSet)
+router.register("locations", LocationViewSet)
+router.register("devices", DeviceViewSet)
+
+urlpatterns = router.urls

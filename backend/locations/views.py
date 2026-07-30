@@ -1,3 +1,39 @@
-from django.shortcuts import render
+from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework import filters, viewsets
 
-# Create your views here.
+from .models import Location
+from .serializers import LocationSerializer
+
+
+class LocationViewSet(viewsets.ModelViewSet):
+    queryset = Location.objects.select_related(
+        "customer",
+        "customer__country",
+    )
+
+    serializer_class = LocationSerializer
+
+    filter_backends = [
+        DjangoFilterBackend,
+        filters.SearchFilter,
+        filters.OrderingFilter,
+    ]
+
+    filterset_fields = [
+        "customer",
+        "active",
+    ]
+
+    search_fields = [
+        "name",
+        "description",
+    ]
+
+    ordering_fields = [
+        "name",
+        "created_at",
+    ]
+
+    ordering = [
+        "name",
+    ]
