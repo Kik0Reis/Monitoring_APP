@@ -63,5 +63,12 @@ class Device(TimeStampedModel):
         verbose_name = "Device"
         verbose_name_plural = "Devices"
 
+        constraints = [
+            models.UniqueConstraint(
+                fields=["location", "name"],
+                name="unique_device_name_per_location",
+            ),
+    ]
+        
     def __str__(self):
         return self.name

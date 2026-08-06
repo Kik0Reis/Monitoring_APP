@@ -1,11 +1,24 @@
 from django.db import models
+
 from core.models import TimeStampedModel
 
-#Model for the country
-# it has a name and a code (PT, US, etc) and it inherits from TimeStampedModel to have created_at and updated_at fields
+
+# Model representing a country.
+# Each country has a unique name and a unique ISO-like code (e.g. PT, US).
+# The model inherits from TimeStampedModel to automatically include
+# created_at and updated_at fields.
 class Country(TimeStampedModel):
-    name = models.CharField(max_length=100)
-    code = models.CharField(max_length=2, unique=True)
+    # Country name.
+    name = models.CharField(
+        max_length=100,
+        unique=True,
+    )
+
+    # Two-letter country code.
+    code = models.CharField(
+        max_length=2,
+        unique=True,
+    )
 
     class Meta:
         ordering = ["name"]

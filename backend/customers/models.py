@@ -3,25 +3,40 @@ from core.models import TimeStampedModel
 from countries.models import Country
 
 
-# Model for the customer 
-# it has a name, a description, an active status and a foreign key to the country model
+# Model representing a customer.
+# Each customer belongs to a country and can own multiple locations.
 class Customer(TimeStampedModel):
+    # Country that owns the customer.
     country = models.ForeignKey(
         Country,
         on_delete=models.CASCADE,
         related_name="customers",
     )
 
-    name = models.CharField(max_length=150)
+    # Customer name.
+    name = models.CharField(
+        max_length=150,
+    )
 
+    # Optional description.
     description = models.TextField(
         blank=True,
     )
 
-    active = models.BooleanField(default=True)
+    # Indicates whether the customer is active.
+    active = models.BooleanField(
+        default=True,
+    )
 
     class Meta:
         ordering = ["name"]
+
+        constraints = [
+            models.UniqueConstraint(
+                fields=["country", "name"],
+                name="unique_customer_name_per_country",
+            ),
+        ]
 
     def __str__(self):
         return self.name
