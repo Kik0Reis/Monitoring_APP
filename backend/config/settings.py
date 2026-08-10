@@ -27,6 +27,40 @@ DEBUG = os.getenv("DEBUG") == "True"
 ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "").split(",")
 
 
+# MQTT configuration.
+# These values are loaded from environment variables so that
+# broker configuration and credentials are not hardcoded in the application.
+
+MQTT_HOST = os.getenv(
+    "MQTT_HOST",
+    "localhost",
+)
+
+MQTT_PORT = int(
+    os.getenv(
+        "MQTT_PORT",
+        "1883",
+    )
+)
+
+MQTT_USERNAME = os.getenv(
+    "MQTT_USERNAME",
+    "",
+)
+
+MQTT_PASSWORD = os.getenv(
+    "MQTT_PASSWORD",
+    "",
+)
+
+MQTT_KEEPALIVE = int(
+    os.getenv(
+        "MQTT_KEEPALIVE",
+        "60",
+    )
+)
+
+
 # Application definition
 
 INSTALLED_APPS = [
