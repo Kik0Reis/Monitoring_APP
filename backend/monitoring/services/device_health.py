@@ -247,54 +247,82 @@ def process_device_status(
     ONLINE:
         - update last_seen
         - set device ONLINE
-        - resolve active offline alerts
+        - resolve offline alerts
 
     OFFLINE:
-        - update last_seen
         - set device OFFLINE
-        - create an offline alert
+        - create offline alert
 
     UNKNOWN:
         - update last_seen
         - set device UNKNOWN
-
-    The MQTT parser is responsible only for understanding the message.
-
-    This function is responsible for deciding what the message means
-    for the database.
     """
 
     if received_at is None:
         received_at = timezone.now()
-
-    # Every valid status message means that we received communication
-    # from the device.
-    update_last_seen(
-        device=device,
-        received_at=received_at,
-    )
-
-    # Update the current device status.
-    update_device_status(
-        device=device,
-        new_status=status,
-    )
 
     # --------------------------------------------------------------
     # ONLINE
     # --------------------------------------------------------------
 
     if status == DeviceStatus.ONLINE:
+
+        update_last_seen(
+            device=device,
+            received_at=received_at,
+        )
+
+        update_device_status(
+            device=device,
+            new_status=DeviceStatus.ONLINE,
+        )
+
         resolve_offline_alerts(device)
+
+        return device
 
     # --------------------------------------------------------------
     # OFFLINE
     # --------------------------------------------------------------
 
-    elif status == DeviceStatus.OFFLINE:
+    if status == DeviceStatus.OFFLINE:
+
+        # IMPORTANT:
+        # Do NOT update last_seen here.
+        #
+        # An offline/LWT message tells us that the device went
+        # offline. It is not a new heartbeat.
+
+        update_device_status(
+            device=device,
+            new_status=DeviceStatus.OFFLINE,
+        )
+
         create_offline_alert(device)
 
-    return device
+        return device
+
+    # --------------------------------------------------------------
+    # UNKNOWN
+    # --------------------------------------------------------------
+
+    if status == DeviceStatus.UNKNOWN:
+
+        update_last_seen(
+            device=device,
+            received_at=received_at,
+        )
+
+        update_device_status(
+            device=device,
+            new_status=DeviceStatus.UNKNOWN,
+        )
+
+        return device
+
+    raise ValueError(
+        f"Invalid device status: {status}"
+    )
 
 
 # ============================================================================
@@ -364,11 +392,12 @@ def process_device_health(
     # Therefore the device itself is ONLINE.
     # ------------------------------------------------------------------
 
-    process_device_status(
+    update_device_status(
         device=device,
-        status=DeviceStatus.ONLINE,
-        received_at=received_at,
+        new_status=DeviceStatus.ONLINE,
     )
+
+    resolve_offline_alerts(device)
 
     # ------------------------------------------------------------------
     # Extract component information

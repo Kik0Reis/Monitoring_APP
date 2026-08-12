@@ -60,6 +60,11 @@ MQTT_KEEPALIVE = int(
     )
 )
 
+MQTT_TLS = os.getenv(
+    "MQTT_TLS",
+    "True",
+) == "True"
+
 
 # Application definition
 
@@ -77,6 +82,7 @@ INSTALLED_APPS = [
     "corsheaders",
 
     "core",
+    "cameras",
     "countries",
     "customers",
     "locations",
@@ -177,4 +183,40 @@ REST_FRAMEWORK = {
     ],
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 10,
+}
+
+
+# Send application logs to the console so they are visible in Docker.
+# This is especially useful for the MQTT worker because it is a
+# long-running background process.
+#
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+
+    "formatters": {
+        "console": {
+            "format": (
+                "{levelname} {asctime} "
+                "{name} - {message}"
+            ),
+            "style": "{",
+        },
+    },
+
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "console",
+        },
+    },
+
+    "loggers": {
+        "mqtt": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
+    },
 }

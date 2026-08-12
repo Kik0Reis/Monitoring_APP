@@ -14,6 +14,7 @@ correctly updates Device, DeviceHeartbeat, and DeviceAlert records.
 
 from django.test import TestCase
 from django.utils import timezone
+from datetime import timedelta
 
 from countries.models import Country
 from customers.models import Customer
@@ -30,6 +31,277 @@ from monitoring.services.device_health import (
     process_device_health,
 )
 
+
+from cameras.models import Camera, CameraStatus
+from monitoring.services.heartbeat_monitor import (
+    check_device_timeout,
+    check_camera_timeout,
+    check_all_heartbeats,
+)
+
+# ============================================================================
+# Camera heartbeat timeout tests
+# ============================================================================
+
+class CameraHeartbeatTimeoutTests(TestCase):
+    """
+    Tests for camera heartbeat timeout/offline detection.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        """
+        Create the hierarchy required by Camera.
+
+        Country
+            ↓
+        Customer
+            ↓
+        Location
+            ↓
+        Edge Device
+            ↓
+        Camera
+        """
+
+        cls.country = Country.objects.create(
+            name="Portugal",
+            code="PT",
+        )
+
+        cls.customer = Customer.objects.create(
+            country=cls.country,
+            name="aitecserv",
+        )
+
+        cls.location = Location.objects.create(
+            customer=cls.customer,
+            name="office2",
+        )
+
+        cls.device = Device.objects.create(
+            location=cls.location,
+            name="Edge 01",
+            mqtt_identifier="edge-01",
+            serial_number="EDGE-001",
+            device_type=DeviceType.EDGE,
+            status=DeviceStatus.ONLINE,
+        )
+
+        cls.camera = Camera.objects.create(
+            device=cls.device,
+            name="Camera 01",
+            camera_identifier="AXIS-B8A44F957EC7",
+            channel=1,
+            status=CameraStatus.ONLINE,
+        )
+
+    # ========================================================================
+    # Camera is still healthy
+    # ========================================================================
+
+    def test_camera_remains_online_within_timeout(self):
+        """
+        A camera remains ONLINE when its last communication is still
+        inside the allowed timeout window.
+        """
+
+        now = timezone.now()
+
+        self.camera.last_seen = (
+            now - timedelta(seconds=30)
+        )
+
+        self.camera.save(
+            update_fields=["last_seen"]
+        )
+
+        check_camera_timeout(
+            camera=self.camera,
+            timeout_seconds=60,
+            now=now,
+        )
+
+        self.camera.refresh_from_db()
+
+        self.assertEqual(
+            self.camera.status,
+            CameraStatus.ONLINE,
+        )
+
+    # ========================================================================
+    # Camera becomes offline
+    # ========================================================================
+
+    def test_camera_becomes_offline_after_timeout(self):
+        """
+        A camera becomes OFFLINE when its heartbeat has expired.
+        """
+
+        now = timezone.now()
+
+        self.camera.last_seen = (
+            now - timedelta(seconds=61)
+        )
+
+        self.camera.save(
+            update_fields=["last_seen"]
+        )
+
+        check_camera_timeout(
+            camera=self.camera,
+            timeout_seconds=60,
+            now=now,
+        )
+
+        self.camera.refresh_from_db()
+
+        self.assertEqual(
+            self.camera.status,
+            CameraStatus.OFFLINE,
+        )
+
+    # ========================================================================
+    # Never-seen camera
+    # ========================================================================
+
+    def test_camera_without_last_seen_remains_unknown(self):
+        """
+        A camera that has never communicated remains UNKNOWN.
+        """
+
+        self.camera.status = CameraStatus.UNKNOWN
+        self.camera.last_seen = None
+
+        self.camera.save(
+            update_fields=[
+                "status",
+                "last_seen",
+            ]
+        )
+
+        check_camera_timeout(
+            camera=self.camera,
+            timeout_seconds=60,
+        )
+
+        self.camera.refresh_from_db()
+
+        self.assertEqual(
+            self.camera.status,
+            CameraStatus.UNKNOWN,
+        )
+
+    # ========================================================================
+    # Camera timeout does not change Edge status
+    # ========================================================================
+
+    def test_camera_timeout_does_not_change_device_status(self):
+        """
+        A camera becoming OFFLINE does not automatically make its
+        Edge device OFFLINE.
+
+        The Edge device has its own heartbeat.
+        """
+
+        now = timezone.now()
+
+        self.device.status = DeviceStatus.ONLINE
+        self.device.last_seen = now
+
+        self.device.save(
+            update_fields=[
+                "status",
+                "last_seen",
+            ]
+        )
+
+        self.camera.last_seen = (
+            now - timedelta(seconds=61)
+        )
+
+        self.camera.save(
+            update_fields=["last_seen"]
+        )
+
+        check_camera_timeout(
+            camera=self.camera,
+            timeout_seconds=60,
+            now=now,
+        )
+
+        self.camera.refresh_from_db()
+        self.device.refresh_from_db()
+
+        self.assertEqual(
+            self.camera.status,
+            CameraStatus.OFFLINE,
+        )
+
+        self.assertEqual(
+            self.device.status,
+            DeviceStatus.ONLINE,
+        )
+
+    # ========================================================================
+    # Combined heartbeat monitor
+    # ========================================================================
+
+    def test_check_all_heartbeats_checks_devices_and_cameras(self):
+        """
+        The combined heartbeat monitor checks both Edge devices
+        and cameras.
+        """
+
+        now = timezone.now()
+
+        # Edge device is healthy.
+        self.device.last_seen = now
+
+        self.device.save(
+            update_fields=["last_seen"]
+        )
+
+        # Camera has timed out.
+        self.camera.last_seen = (
+            now - timedelta(seconds=61)
+        )
+
+        self.camera.save(
+            update_fields=["last_seen"]
+        )
+
+        result = check_all_heartbeats(
+            timeout_seconds=60,
+            now=now,
+        )
+
+        self.device.refresh_from_db()
+        self.camera.refresh_from_db()
+
+        # Device remains online.
+        self.assertEqual(
+            self.device.status,
+            DeviceStatus.ONLINE,
+        )
+
+        # Camera becomes offline.
+        self.assertEqual(
+            self.camera.status,
+            CameraStatus.OFFLINE,
+        )
+
+        # Combined result should report one offline camera
+        # and zero offline devices.
+        self.assertEqual(
+            result["devices_offline"],
+            0,
+        )
+
+        self.assertEqual(
+            result["cameras_offline"],
+            1,
+        )
 
 class DeviceHealthServiceTests(TestCase):
     """

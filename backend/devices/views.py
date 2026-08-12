@@ -6,6 +6,7 @@ from .serializers import DeviceSerializer
 
 
 class DeviceViewSet(viewsets.ModelViewSet):
+
     queryset = Device.objects.select_related(
         "location",
         "location__customer",

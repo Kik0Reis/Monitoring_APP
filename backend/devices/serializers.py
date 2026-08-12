@@ -6,14 +6,12 @@ from locations.serializers import LocationSummarySerializer
 from .models import Device
 
 
-# Serializer responsible for validating and serializing Device objects.
 class DeviceSerializer(serializers.ModelSerializer):
-    # Nested location information returned in responses.
+
     location = LocationSummarySerializer(
         read_only=True,
     )
 
-    # Location ID used when creating or updating a device.
     location_id = serializers.PrimaryKeyRelatedField(
         queryset=Location.objects.all(),
         source="location",
@@ -40,6 +38,7 @@ class DeviceSerializer(serializers.ModelSerializer):
 
         read_only_fields = (
             "id",
+            "device_type",
             "status",
             "last_seen",
             "created_at",
@@ -47,10 +46,6 @@ class DeviceSerializer(serializers.ModelSerializer):
         )
 
     def validate_name(self, value):
-        """
-        Validate the device name.
-        """
-
         value = value.strip()
 
         if len(value) < 2:
@@ -61,11 +56,7 @@ class DeviceSerializer(serializers.ModelSerializer):
         return value
 
     def validate_mqtt_identifier(self, value):
-        """
-        Validate and normalize the MQTT identifier.
-        """
-
-        value = value.strip().upper()
+        value = value.strip()
 
         if len(value) < 3:
             raise serializers.ValidationError(
@@ -75,17 +66,9 @@ class DeviceSerializer(serializers.ModelSerializer):
         return value
 
     def validate_serial_number(self, value):
-        """
-        Validate and normalize the serial number.
-        """
-
         return value.strip().upper()
 
     def validate(self, attrs):
-        """
-        Prevent creating devices under inactive locations.
-        """
-
         location = attrs.get("location")
 
         if location and not location.active:

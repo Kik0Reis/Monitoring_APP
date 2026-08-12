@@ -1,26 +1,26 @@
 """
 Heartbeat timeout monitoring.
 
-This module checks devices that have stopped communicating.
+Checks both Edge devices and Cameras for expired heartbeats.
 
-The MQTT client receives messages and updates Device.last_seen.
+The MQTT layer is responsible for updating last_seen whenever valid
+communication is received.
 
-This service periodically checks last_seen and determines whether
-a device should now be considered OFFLINE.
+This service is responsible only for detecting when communication
+has stopped.
 
-The flow is:
+Flow:
 
-    Device.last_seen
-          ↓
-    Calculate elapsed time
-          ↓
-    Compare with timeout
-          ↓
+    MQTT message
+        ↓
+    Device.last_seen / Camera.last_seen
+        ↓
+    Heartbeat monitor
+        ↓
+    timeout exceeded?
+        ↓
     ONLINE → OFFLINE
-          ↓
-    Create DEVICE_OFFLINE alert
 """
-
 
 from datetime import timedelta
 
@@ -28,25 +28,26 @@ from django.db import transaction
 from django.utils import timezone
 
 from devices.models import Device, DeviceStatus
+from cameras.models import Camera, CameraStatus
 
 from monitoring.services.device_health import (
     create_offline_alert,
     update_device_status,
 )
 
-
-# ============================================================================
-# Heartbeat timeout
-# ============================================================================
+# If you have camera offline-alert functionality, import it here.
+# from monitoring.services.camera_monitor import (
+#     create_camera_offline_alert,
+#     update_camera_status,
+# )
 
 
 DEFAULT_HEARTBEAT_TIMEOUT_SECONDS = 60
 
 
 # ============================================================================
-# Check a single device
+# Device heartbeat
 # ============================================================================
-
 
 @transaction.atomic
 def check_device_timeout(
@@ -55,67 +56,32 @@ def check_device_timeout(
     now=None,
 ) -> Device:
     """
-    Check whether a device has stopped communicating.
+    Check whether an Edge device has stopped communicating.
 
-    A device is considered offline when:
+    Devices with no last_seen remain UNKNOWN.
 
-        last_seen + timeout < current time
-
-    If the device has never communicated:
-
-        last_seen = None
-
-    we do not automatically mark it offline here.
-
-    This allows newly-created devices to remain UNKNOWN until the
-    monitoring system has enough information to determine their state.
+    Devices whose heartbeat has expired become OFFLINE.
     """
 
     if now is None:
         now = timezone.now()
 
-    # ------------------------------------------------------------------
-    # A device that has never communicated remains UNKNOWN.
-    # ------------------------------------------------------------------
-
     if device.last_seen is None:
         return device
 
-    # ------------------------------------------------------------------
-    # Calculate the time after which the heartbeat is considered expired.
-    # ------------------------------------------------------------------
-
-    timeout_delta = timedelta(
-        seconds=timeout_seconds
+    expires_at = (
+        device.last_seen
+        + timedelta(seconds=timeout_seconds)
     )
 
-    expires_at = device.last_seen + timeout_delta
-
-    # ------------------------------------------------------------------
-    # The device is still within its heartbeat window.
-    # ------------------------------------------------------------------
-
     if now <= expires_at:
-
-        # If the device was previously ONLINE, keep it ONLINE.
         return device
 
-    # ------------------------------------------------------------------
-    # Heartbeat has expired.
-    # ------------------------------------------------------------------
-
     if device.status != DeviceStatus.OFFLINE:
-
         update_device_status(
             device=device,
             new_status=DeviceStatus.OFFLINE,
         )
-
-    # ------------------------------------------------------------------
-    # Make sure there is an active offline alert.
-    #
-    # create_offline_alert() prevents duplicate active alerts.
-    # ------------------------------------------------------------------
 
     create_offline_alert(device)
 
@@ -123,18 +89,62 @@ def check_device_timeout(
 
 
 # ============================================================================
-# Check all active devices
+# Camera heartbeat
 # ============================================================================
 
+@transaction.atomic
+def check_camera_timeout(
+    camera: Camera,
+    timeout_seconds: int = DEFAULT_HEARTBEAT_TIMEOUT_SECONDS,
+    now=None,
+) -> Camera:
+    """
+    Check whether a camera has stopped communicating.
+
+    Cameras with no last_seen remain UNKNOWN.
+
+    Cameras whose heartbeat has expired become OFFLINE.
+    """
+
+    if now is None:
+        now = timezone.now()
+
+    if camera.last_seen is None:
+        return camera
+
+    expires_at = (
+        camera.last_seen
+        + timedelta(seconds=timeout_seconds)
+    )
+
+    if now <= expires_at:
+        return camera
+
+    if camera.status != CameraStatus.OFFLINE:
+        camera.status = CameraStatus.OFFLINE
+
+        camera.save(
+            update_fields=[
+                "status",
+                "updated_at",
+            ]
+        )
+
+    return camera
+
+
+# ============================================================================
+# Check all devices
+# ============================================================================
 
 def check_all_device_timeouts(
     timeout_seconds: int = DEFAULT_HEARTBEAT_TIMEOUT_SECONDS,
     now=None,
 ) -> int:
     """
-    Check all active devices for heartbeat expiration.
+    Check all active Edge devices.
 
-    Returns the number of devices currently considered OFFLINE.
+    Returns the number of devices currently OFFLINE.
     """
 
     if now is None:
@@ -154,8 +164,6 @@ def check_all_device_timeouts(
             now=now,
         )
 
-        # Refresh because check_device_timeout() may have changed
-        # the status.
         device.refresh_from_db(
             fields=["status"],
         )
@@ -165,3 +173,76 @@ def check_all_device_timeouts(
 
     return offline_count
 
+
+# ============================================================================
+# Check all cameras
+# ============================================================================
+
+def check_all_camera_timeouts(
+    timeout_seconds: int = DEFAULT_HEARTBEAT_TIMEOUT_SECONDS,
+    now=None,
+) -> int:
+    """
+    Check all active cameras.
+
+    Returns the number of cameras currently OFFLINE.
+    """
+
+    if now is None:
+        now = timezone.now()
+
+    offline_count = 0
+
+    cameras = Camera.objects.filter(
+        active=True,
+    )
+
+    for camera in cameras:
+
+        check_camera_timeout(
+            camera=camera,
+            timeout_seconds=timeout_seconds,
+            now=now,
+        )
+
+        camera.refresh_from_db(
+            fields=["status"],
+        )
+
+        if camera.status == CameraStatus.OFFLINE:
+            offline_count += 1
+
+    return offline_count
+
+
+# ============================================================================
+# Check everything
+# ============================================================================
+
+def check_all_heartbeats(
+    timeout_seconds: int = DEFAULT_HEARTBEAT_TIMEOUT_SECONDS,
+    now=None,
+) -> dict[str, int]:
+    """
+    Check both Edge devices and Cameras.
+
+    This is the function that the periodic monitoring job should call.
+    """
+
+    if now is None:
+        now = timezone.now()
+
+    devices_offline = check_all_device_timeouts(
+        timeout_seconds=timeout_seconds,
+        now=now,
+    )
+
+    cameras_offline = check_all_camera_timeouts(
+        timeout_seconds=timeout_seconds,
+        now=now,
+    )
+
+    return {
+        "devices_offline": devices_offline,
+        "cameras_offline": cameras_offline,
+    }

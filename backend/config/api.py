@@ -4,6 +4,7 @@ from countries.views import CountryViewSet
 from customers.views import CustomerViewSet
 from locations.views import LocationViewSet
 from devices.views import DeviceViewSet
+from cameras.views import CameraViewSet
 
 router = DefaultRouter()
 
@@ -13,5 +14,6 @@ router.register("countries", CountryViewSet)
 router.register("customers", CustomerViewSet)
 router.register("locations", LocationViewSet)
 router.register("devices", DeviceViewSet)
+router.register("cameras", CameraViewSet)
 
 urlpatterns = router.urls

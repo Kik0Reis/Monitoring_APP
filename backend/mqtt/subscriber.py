@@ -1,64 +1,35 @@
 """
 MQTT subscriber.
 
-This module is responsible only for communicating with the MQTT broker.
+Responsible only for connecting to EMQX Cloud and receiving MQTT messages.
 
-Responsibilities:
-
-    1. Connect to the MQTT broker.
-    2. Subscribe to the AiAction topic namespace.
-    3. Receive MQTT messages.
-    4. Pass messages to the MQTT service.
-
-It does NOT:
-
+This module does not:
     - parse topics
     - parse JSON
     - update devices
     - create alerts
     - contain health logic
 
-Those responsibilities belong to parser.py and service.py.
+Those responsibilities will be handled by other MQTT/monitoring modules.
 """
 
 import logging
 
 import paho.mqtt.client as mqtt
 from django.conf import settings
-
 from mqtt.service import process_mqtt_message
-
-
-# ============================================================================
-# Logger
-# ============================================================================
 
 logger = logging.getLogger(__name__)
 
 
-# ============================================================================
-# MQTT configuration
-# ============================================================================
-
-MQTT_TOPIC = "aiaction/#"
-
-
-# ============================================================================
-# Subscriber
-# ============================================================================
-
-
 class MQTTSubscriber:
     """
-    MQTT subscriber responsible for receiving AiAction messages.
+    MQTT subscriber for the AiAction MQTT namespace.
     """
 
     def __init__(self):
         """
         Initialize the MQTT client.
-
-        Broker configuration comes from Django settings/environment
-        variables.
         """
 
         self.host = settings.MQTT_HOST
@@ -67,9 +38,15 @@ class MQTTSubscriber:
         self.username = settings.MQTT_USERNAME
         self.password = settings.MQTT_PASSWORD
 
+        self.topic = "aiaction/#"
+
+        # --------------------------------------------------------------
+        # Create MQTT client
+        # --------------------------------------------------------------
+
         self.client = mqtt.Client(
-            mqtt.CallbackAPIVersion.VERSION2,
-            client_id="monitoring-backend",
+            callback_api_version=mqtt.CallbackAPIVersion.VERSION2,
+            client_id="monitoring-app-subscriber",
         )
 
         # --------------------------------------------------------------
@@ -83,16 +60,23 @@ class MQTTSubscriber:
             )
 
         # --------------------------------------------------------------
-        # MQTT callbacks
+        # TLS
+        # --------------------------------------------------------------
+
+        if settings.MQTT_TLS:
+            self.client.tls_set()
+
+        # --------------------------------------------------------------
+        # Callbacks
         # --------------------------------------------------------------
 
         self.client.on_connect = self.on_connect
         self.client.on_message = self.on_message
         self.client.on_disconnect = self.on_disconnect
 
-    # ========================================================================
-    # Connection
-    # ========================================================================
+    # ==================================================================
+    # CONNECT
+    # ==================================================================
 
     def on_connect(
         self,
@@ -103,55 +87,55 @@ class MQTTSubscriber:
         properties,
     ):
         """
-        Called when the MQTT client connects to the broker.
+        Called when the MQTT client connects to EMQX Cloud.
         """
 
-        if reason_code == 0:
+        logger.info(
+            "MQTT connection result: %s",
+            reason_code,
+        )
+
+        if reason_code != 0:
+            logger.error(
+                "Failed to connect to EMQX Cloud. "
+                "Reason: %s",
+                reason_code,
+            )
+            return
+
+        logger.info(
+            "Connected to EMQX Cloud: %s:%s",
+            self.host,
+            self.port,
+        )
+
+        # --------------------------------------------------------------
+        # Subscribe
+        # --------------------------------------------------------------
+
+        result, message_id = client.subscribe(
+            self.topic,
+            qos=1,
+        )
+
+        if result == mqtt.MQTT_ERR_SUCCESS:
 
             logger.info(
-                "Connected to MQTT broker %s:%s",
-                self.host,
-                self.port,
+                "Subscribed successfully to: %s",
+                self.topic,
             )
-
-            # ----------------------------------------------------------
-            # Subscribe to all AiAction messages.
-            #
-            # The parser will determine what type of message it is.
-            # ----------------------------------------------------------
-
-            result, mid = client.subscribe(
-                MQTT_TOPIC,
-                qos=1,
-            )
-
-            if result == mqtt.MQTT_ERR_SUCCESS:
-
-                logger.info(
-                    "Subscribed to MQTT topic: %s",
-                    MQTT_TOPIC,
-                )
-
-            else:
-
-                logger.error(
-                    "Failed to subscribe to MQTT topic %s. "
-                    "Error code: %s",
-                    MQTT_TOPIC,
-                    result,
-                )
 
         else:
 
             logger.error(
-                "Failed to connect to MQTT broker. "
-                "Reason code: %s",
-                reason_code,
+                "Failed to subscribe to %s. Error: %s",
+                self.topic,
+                result,
             )
 
-    # ========================================================================
-    # Message received
-    # ========================================================================
+    # ==================================================================
+    # MESSAGE
+    # ==================================================================
 
     def on_message(
         self,
@@ -162,13 +146,17 @@ class MQTTSubscriber:
         """
         Called whenever an MQTT message is received.
 
-        The MQTT payload is passed directly to the MQTT service.
+        The subscriber does not interpret the MQTT message.
 
-        The subscriber does not interpret the message.
+        It simply passes the raw topic and payload to the service layer.
         """
 
         logger.info(
-            "MQTT message received: topic=%s",
+            "MQTT message received."
+        )
+
+        logger.info(
+            "Topic: %s",
             message.topic,
         )
 
@@ -180,22 +168,20 @@ class MQTTSubscriber:
             )
 
         except Exception:
-            """
-            Never allow an exception from one MQTT message to kill
-            the subscriber.
 
-            The error is logged and the subscriber continues receiving
-            future messages.
-            """
+            # --------------------------------------------------------------
+            # An error processing one message must never kill the
+            # long-running MQTT subscriber.
+            # --------------------------------------------------------------
 
             logger.exception(
                 "Error processing MQTT message: %s",
                 message.topic,
             )
-
-    # ========================================================================
-    # Disconnect
-    # ========================================================================
+        
+    # ==================================================================
+    # DISCONNECT
+    # ==================================================================
 
     def on_disconnect(
         self,
@@ -210,22 +196,25 @@ class MQTTSubscriber:
         """
 
         logger.warning(
-            "Disconnected from MQTT broker. "
-            "Reason code: %s",
+            "Disconnected from EMQX Cloud. Reason: %s",
             reason_code,
         )
 
-    # ========================================================================
-    # Start
-    # ========================================================================
+    # ==================================================================
+    # START
+    # ==================================================================
 
     def start(self):
         """
-        Connect to the MQTT broker and start the MQTT network loop.
+        Connect to EMQX Cloud and keep the subscriber running.
         """
 
         logger.info(
-            "Connecting to MQTT broker %s:%s",
+            "Starting MQTT subscriber..."
+        )
+
+        logger.info(
+            "Connecting to EMQX Cloud %s:%s",
             self.host,
             self.port,
         )
@@ -236,25 +225,19 @@ class MQTTSubscriber:
             keepalive=60,
         )
 
-        # --------------------------------------------------------------
-        # loop_forever() blocks this process and continuously handles
-        # MQTT network traffic.
-        # --------------------------------------------------------------
-
         self.client.loop_forever()
 
-    # ========================================================================
-    # Stop
-    # ========================================================================
+    # ==================================================================
+    # STOP
+    # ==================================================================
 
     def stop(self):
         """
-        Stop the MQTT client cleanly.
+        Disconnect the MQTT client cleanly.
         """
 
         logger.info(
-            "Stopping MQTT subscriber."
+            "Stopping MQTT subscriber..."
         )
 
         self.client.disconnect()
-

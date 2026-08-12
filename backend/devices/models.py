@@ -4,28 +4,32 @@ from core.models import TimeStampedModel
 from locations.models import Location
 
 
-
-# Enum for device status
 class DeviceStatus(models.TextChoices):
     ONLINE = "ONLINE", "Online"
     OFFLINE = "OFFLINE", "Offline"
     UNKNOWN = "UNKNOWN", "Unknown"
 
-# Enum for device type
+
 class DeviceType(models.TextChoices):
-    CAMERA = "CAMERA", "Camera"
     EDGE = "EDGE", "Edge Device"
 
-# Model for the device
-# it has a name, a mqtt_identifier, a serial_number, a status, a last_seen and an active status and a foreign key to the location model
+
 class Device(TimeStampedModel):
+    """
+    Represents an Edge device.
+
+    An Edge device can have multiple cameras connected to it.
+    """
+
     location = models.ForeignKey(
         Location,
         on_delete=models.CASCADE,
         related_name="devices",
     )
 
-    name = models.CharField(max_length=150)
+    name = models.CharField(
+        max_length=150,
+    )
 
     mqtt_identifier = models.CharField(
         max_length=150,
@@ -53,10 +57,13 @@ class Device(TimeStampedModel):
     device_type = models.CharField(
         max_length=20,
         choices=DeviceType.choices,
-        default=DeviceType.CAMERA,
+        default=DeviceType.EDGE,
+        editable=False,
     )
 
-    active = models.BooleanField(default=True)
+    active = models.BooleanField(
+        default=True,
+    )
 
     class Meta:
         ordering = ["name"]
@@ -68,7 +75,7 @@ class Device(TimeStampedModel):
                 fields=["location", "name"],
                 name="unique_device_name_per_location",
             ),
-    ]
-        
+        ]
+
     def __str__(self):
         return self.name

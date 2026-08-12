@@ -1,218 +1,351 @@
 """
-MQTT message processing service.
+MQTT message service.
 
-This module connects the MQTT parser with the monitoring services.
+This module bridges the MQTT layer and the monitoring layer.
 
-It does NOT:
-- connect to the MQTT broker
-- subscribe to topics
+Responsibilities:
+
+1. Receive a raw MQTT topic and payload.
+2. Parse the MQTT message.
+3. Resolve the Edge device.
+4. Resolve the Camera when the message is camera-level.
+5. Route the message to the correct monitoring service.
+
+This module does NOT:
+
+- connect to MQTT
 - parse MQTT topics itself
-
-Its responsibility is:
-
-    parsed MQTT message
-            ↓
-       find Device
-            ↓
-       call correct monitoring service
+- implement monitoring business logic
+- implement heartbeat timeout logic
 """
 
-from typing import Any
-
-from django.utils import timezone
+import logging
 
 from devices.models import Device
+
+from mqtt.parser import MQTTParserError, parse_mqtt_message
 
 from monitoring.services.device_health import (
     process_device_health,
     process_device_status,
 )
 
-from mqtt.parser import (
-    MQTTParserError,
-    parse_message,
+from monitoring.services.camera_monitor import (
+    get_camera,
+    process_camera_alert,
+    process_camera_error,
+    process_camera_event,
 )
 
 
+logger = logging.getLogger(__name__)
+
+
 # ============================================================================
-# Device lookup
+# Edge lookup
 # ============================================================================
 
-
-class MQTTDeviceNotFoundError(Exception):
+def get_device(
+    device_id: str,
+) -> Device | None:
     """
-    Raised when an MQTT message references a device that does not exist.
-    """
+    Resolve an MQTT device identifier to an active Edge device.
 
-    pass
-
-
-def get_device(device_id: str) -> Device:
-    """
-    Find a Device using its MQTT identifier.
-
-    The MQTT device_id is matched against Device.mqtt_identifier.
+    MQTT device_id maps to Device.mqtt_identifier.
     """
 
     try:
         return Device.objects.get(
             mqtt_identifier=device_id,
-        )
-    except Device.DoesNotExist as exc:
-        raise MQTTDeviceNotFoundError(
-            f"Device with MQTT identifier "
-            f"'{device_id}' does not exist."
-        ) from exc
-
-
-# ============================================================================
-# Status message
-# ============================================================================
-
-
-def process_status_message(
-    device: Device,
-    payload: dict[str, Any],
-) -> Device:
-    """
-    Process an MQTT device status message.
-
-    Expected payload:
-
-        {
-            "status": "online",
-            "version": "1.0.0",
-            "timestamp": "...",
-            "source": "aiaction"
-        }
-    """
-
-    status = payload.get("status")
-
-    if status == "online":
-        from devices.models import DeviceStatus
-
-        device_status = DeviceStatus.ONLINE
-
-    elif status == "offline":
-        from devices.models import DeviceStatus
-
-        device_status = DeviceStatus.OFFLINE
-
-    else:
-        raise MQTTParserError(
-            f"Unsupported device status: {status}"
+            active=True,
+            device_type="EDGE",
         )
 
-    return process_device_status(
-        device=device,
-        status=device_status,
-        received_at=timezone.now(),
-    )
+    except Device.DoesNotExist:
+
+        logger.warning(
+            "Received MQTT message for unknown Edge device: %s",
+            device_id,
+        )
+
+        return None
 
 
 # ============================================================================
-# Health message
+# MQTT message processing
 # ============================================================================
-
-
-def process_health_message(
-    device: Device,
-    payload: dict[str, Any],
-) -> Device:
-    """
-    Process an MQTT device health message.
-
-    The monitoring service is responsible for evaluating the health
-    components.
-    """
-
-    process_device_health(
-        device=device,
-        payload=payload,
-        received_at=timezone.now(),
-    )
-
-    return device
-
-
-# ============================================================================
-# Complete MQTT message
-# ============================================================================
-
 
 def process_mqtt_message(
     topic: str,
     payload: bytes | str | dict,
-) -> Device | None:
+):
     """
-    Process a complete MQTT message.
+    Process one MQTT message.
 
-    Current supported message types:
+    Flow:
 
-        status
-        health
-
-    Camera-level messages are parsed successfully but are not yet
-    processed into monitoring records.
-
-    That is intentional. We first establish reliable device health
-    monitoring before adding camera-level alert/event persistence.
+        MQTT
+          ↓
+        Parser
+          ↓
+        Edge lookup
+          ↓
+        Message type
+          │
+          ├── status → Device monitoring
+          ├── health → Device monitoring
+          │
+          └── camera message
+                  ↓
+              Camera lookup
+                  ↓
+              Camera monitoring
     """
 
-    message = parse_message(
-        topic=topic,
-        payload=payload,
+    logger.info(
+        "Processing MQTT message: %s",
+        topic,
     )
 
-    topic_data = message["topic"]
-    message_payload = message["payload"]
+    # ========================================================================
+    # Parse
+    # ========================================================================
 
-    message_type = topic_data["message_type"]
+    try:
 
-    # ------------------------------------------------------------------
-    # Find the corresponding Device.
-    # ------------------------------------------------------------------
+        parsed_message = parse_mqtt_message(
+            topic=topic,
+            payload=payload,
+        )
 
-    device = get_device(
-        device_id=topic_data["device_id"],
+    except MQTTParserError as exc:
+
+        logger.warning(
+            "Invalid MQTT message: %s",
+            exc,
+        )
+
+        return None
+
+    message_type = parsed_message["message_type"]
+    device_id = parsed_message["device_id"]
+    payload_data = parsed_message["payload"]
+
+    # ========================================================================
+    # Resolve Edge
+    # ========================================================================
+
+    device = get_device(device_id)
+
+    if device is None:
+        return None
+
+    logger.info(
+        "MQTT Edge resolved: mqtt_identifier=%s device=%s",
+        device_id,
+        device,
     )
 
-    # ------------------------------------------------------------------
-    # Device status
-    # ------------------------------------------------------------------
+    # ========================================================================
+    # DEVICE STATUS
+    # ========================================================================
 
     if message_type == "status":
 
-        return process_status_message(
-            device=device,
-            payload=message_payload,
+        status = payload_data.get("status")
+
+        if not status:
+
+            logger.warning(
+                "Status MQTT message does not contain 'status': %s",
+                topic,
+            )
+
+            return None
+
+        try:
+
+            device = process_device_status(
+                device=device,
+                status=status.upper(),
+            )
+
+        except ValueError:
+
+            logger.exception(
+                "Invalid device status received from MQTT: %s",
+                status,
+            )
+
+            return None
+
+        device.refresh_from_db()
+
+        logger.info(
+            "Device status processed: device=%s status=%s",
+            device,
+            device.status,
         )
 
-    # ------------------------------------------------------------------
-    # Device health
-    # ------------------------------------------------------------------
+        return device
+
+    # ========================================================================
+    # DEVICE HEALTH
+    # ========================================================================
 
     if message_type == "health":
 
-        return process_health_message(
+        process_device_health(
             device=device,
-            payload=message_payload,
+            payload=payload_data,
         )
 
-    # ------------------------------------------------------------------
-    # Camera-level messages
-    #
-    # These are parsed but not persisted yet.
-    # ------------------------------------------------------------------
+        device.refresh_from_db()
 
-    if message_type in {
+        logger.info(
+            "Device health processed: device=%s status=%s",
+            device,
+            device.status,
+        )
+
+        return device
+
+    # ========================================================================
+    # CAMERA MESSAGE VALIDATION
+    # ========================================================================
+
+    # At this point the only supported message types should be:
+    #
+    #   alert
+    #   event
+    #   error
+    #
+    # All of these require a camera.
+
+    if message_type not in {
         "alert",
         "event",
         "error",
     }:
-        return device
 
-    raise MQTTParserError(
-        f"Unsupported MQTT message type: {message_type}"
+        logger.warning(
+            "Unsupported MQTT message type: %s",
+            message_type,
+        )
+
+        return None
+
+    camera_id = parsed_message.get("camera_id")
+    channel = parsed_message.get("channel")
+
+    if not camera_id or channel is None:
+
+        logger.warning(
+            "Camera MQTT message is missing camera_id/channel: %s",
+            topic,
+        )
+
+        return None
+
+    # ========================================================================
+    # Resolve Camera
+    # ========================================================================
+
+    camera = get_camera(
+        device=device,
+        camera_identifier=camera_id,
+        channel=channel,
     )
+
+    if camera is None:
+
+        logger.warning(
+            "Received MQTT message for unknown camera: "
+            "device=%s camera=%s channel=%s",
+            device,
+            camera_id,
+            channel,
+        )
+
+        return None
+
+    logger.info(
+        "MQTT camera resolved: "
+        "device=%s camera=%s channel=%s",
+        device,
+        camera,
+        channel,
+    )
+
+    # ========================================================================
+    # CAMERA ALERT
+    # ========================================================================
+
+    if message_type == "alert":
+
+        alert = process_camera_alert(
+            camera=camera,
+            payload=payload_data,
+        )
+
+        camera.refresh_from_db()
+
+        logger.info(
+            "Camera alert processed: "
+            "camera=%s alert=%s status=%s",
+            camera,
+            alert,
+            camera.status,
+        )
+
+        return camera
+
+    # ========================================================================
+    # CAMERA EVENT
+    # ========================================================================
+
+    if message_type == "event":
+
+        process_camera_event(
+            camera=camera,
+            payload=payload_data,
+            action_code=parsed_message.get("action_code"),
+        )
+
+        camera.refresh_from_db()
+
+        logger.info(
+            "Camera event processed: "
+            "camera=%s action=%s status=%s",
+            camera,
+            parsed_message.get("action_code"),
+            camera.status,
+        )
+
+        return camera
+
+    # ========================================================================
+    # CAMERA ERROR
+    # ========================================================================
+
+    if message_type == "error":
+
+        alert = process_camera_error(
+            camera=camera,
+            payload=payload_data,
+        )
+
+        camera.refresh_from_db()
+
+        logger.info(
+            "Camera error processed: "
+            "camera=%s alert=%s status=%s",
+            camera,
+            alert,
+            camera.status,
+        )
+
+        return camera
+
+    return None
+
