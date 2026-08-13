@@ -53,3 +53,27 @@ services:
       - mqtt_subscriber
 
     restart: unless-stopped
+
+
+  heartbeat:
+    build:
+      context: ./backend
+
+    container_name: monitoring-heartbeat
+
+    volumes:
+      - ./backend:/app
+
+    env_file:
+      - ./backend/.env
+
+    command:
+      - python
+      - manage.py
+      - heartbeat_worker
+      - --timeout
+      - "60"
+      - --interval
+      - "10"
+
+    restart: unless-stopped

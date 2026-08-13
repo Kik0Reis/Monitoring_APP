@@ -4,7 +4,6 @@ from devices.models import Device
 
 from .models import Camera
 
-
 class CameraSerializer(serializers.ModelSerializer):
     device_name = serializers.CharField(
         source="device.name",
@@ -101,4 +100,4 @@ class CameraSerializer(serializers.ModelSerializer):
                 }
             )
 
-        return attrs
+        return attrs 
