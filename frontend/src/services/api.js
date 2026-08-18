@@ -10,7 +10,7 @@ async function apiRequest(endpoint, options = {}) {
   });
 
   if (!response.ok) {
-    let error;
+    let error = null;
 
     try {
       error = await response.json();
@@ -18,10 +18,34 @@ async function apiRequest(endpoint, options = {}) {
       error = null;
     }
 
+    if (error?.detail) {
+      throw new Error(error.detail);
+    }
+
+    if (error?.message) {
+      throw new Error(error.message);
+    }
+
+    // Django serializer validation errors
+    if (error && typeof error === "object") {
+      const messages = Object.entries(error)
+        .flatMap(([field, messages]) => {
+          if (Array.isArray(messages)) {
+            return messages.map(
+              (message) => `${field}: ${message}`
+            );
+          }
+
+          return [`${field}: ${messages}`];
+        });
+
+      if (messages.length > 0) {
+        throw new Error(messages.join(" "));
+      }
+    }
+
     throw new Error(
-      error?.detail ||
-        error?.message ||
-        "Something went wrong while communicating with the API."
+      "Something went wrong while communicating with the API."
     );
   }
 
