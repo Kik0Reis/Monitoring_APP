@@ -41,11 +41,13 @@ def parse_topic(topic: str) -> dict[str, Any]:
     """
     Parse an AiAction MQTT topic.
 
-    Supported topic structures:
+    Supported topics:
 
         aiaction/{country}/{client}/{installation}/{device_id}/status/{source}
 
         aiaction/{country}/{client}/{installation}/{device_id}/health
+
+        aiaction/{country}/{client}/{installation}/{device_id}/cameras
 
         aiaction/{country}/{client}/{installation}/{device_id}/
         {camera_id}/ch{channel}/alert
@@ -55,8 +57,6 @@ def parse_topic(topic: str) -> dict[str, Any]:
 
         aiaction/{country}/{client}/{installation}/{device_id}/
         {camera_id}/ch{channel}/error
-
-    Returns a dictionary containing the extracted information.
     """
 
     if not isinstance(topic, str) or not topic.strip():
@@ -66,20 +66,11 @@ def parse_topic(topic: str) -> dict[str, Any]:
 
     parts = topic.strip().split("/")
 
-    # ------------------------------------------------------------------------
-    # Every supported topic must begin with "aiaction".
-    # ------------------------------------------------------------------------
-
     if not parts or parts[0] != "aiaction":
         raise MQTTParserError(
-            f"Unsupported MQTT topic namespace: {parts[0] if parts else ''}"
+            f"Unsupported MQTT topic namespace: "
+            f"{parts[0] if parts else ''}"
         )
-
-    # ------------------------------------------------------------------------
-    # All supported topics contain at least:
-    #
-    # aiaction/country/client/installation/device_id/type
-    # ------------------------------------------------------------------------
 
     if len(parts) < 6:
         raise MQTTParserError(
@@ -91,7 +82,6 @@ def parse_topic(topic: str) -> dict[str, Any]:
     installation = parts[3]
     device_id = parts[4]
 
-    # Make sure the required values aren't empty.
     if not country:
         raise MQTTParserError(
             "MQTT topic country cannot be empty."
@@ -112,15 +102,17 @@ def parse_topic(topic: str) -> dict[str, Any]:
             "MQTT topic device_id cannot be empty."
         )
 
-    # ------------------------------------------------------------------------
+    # ========================================================================
     # Device status
     #
-    # aiaction/{country}/{client}/{installation}/{device_id}/status/{source}
-    # ------------------------------------------------------------------------
+    # aiaction/.../{device_id}/status/{source}
+    # ========================================================================
 
     if len(parts) == 7 and parts[5] == "status":
 
-        if not parts[6]:
+        source = parts[6]
+
+        if not source:
             raise MQTTParserError(
                 "MQTT status source cannot be empty."
             )
@@ -131,14 +123,14 @@ def parse_topic(topic: str) -> dict[str, Any]:
             "client": client,
             "installation": installation,
             "device_id": device_id,
-            "source": parts[6],
+            "source": source,
         }
 
-    # ------------------------------------------------------------------------
+    # ========================================================================
     # Device health
     #
-    # aiaction/{country}/{client}/{installation}/{device_id}/health
-    # ------------------------------------------------------------------------
+    # aiaction/.../{device_id}/health
+    # ========================================================================
 
     if len(parts) == 6 and parts[5] == "health":
 
@@ -150,9 +142,25 @@ def parse_topic(topic: str) -> dict[str, Any]:
             "device_id": device_id,
         }
 
-    # ------------------------------------------------------------------------
+    # ========================================================================
+    # Camera status list
+    #
+    # aiaction/.../{device_id}/cameras
+    # ========================================================================
+
+    if len(parts) == 6 and parts[5] == "cameras":
+
+        return {
+            "message_type": "cameras",
+            "country": country,
+            "client": client,
+            "installation": installation,
+            "device_id": device_id,
+        }
+
+    # ========================================================================
     # Camera-level topics
-    # ------------------------------------------------------------------------
+    # ========================================================================
 
     if len(parts) < 8:
         raise MQTTParserError(
@@ -167,10 +175,6 @@ def parse_topic(topic: str) -> dict[str, Any]:
             "Camera ID cannot be empty."
         )
 
-    # ------------------------------------------------------------------------
-    # Channel must have the expected "ch" prefix.
-    # ------------------------------------------------------------------------
-
     if not channel.startswith("ch"):
         raise MQTTParserError(
             f"Invalid channel in MQTT topic: {channel}"
@@ -183,11 +187,11 @@ def parse_topic(topic: str) -> dict[str, Any]:
             f"Invalid channel number: {channel}"
         )
 
-    # ------------------------------------------------------------------------
+    channel_number = int(channel_number)
+
+    # ========================================================================
     # Alert
-    #
-    # .../{camera_id}/ch{channel}/alert
-    # ------------------------------------------------------------------------
+    # ========================================================================
 
     if len(parts) == 8 and parts[7] == "alert":
 
@@ -198,14 +202,12 @@ def parse_topic(topic: str) -> dict[str, Any]:
             "installation": installation,
             "device_id": device_id,
             "camera_id": camera_id,
-            "channel": int(channel_number),
+            "channel": channel_number,
         }
 
-    # ------------------------------------------------------------------------
+    # ========================================================================
     # Error
-    #
-    # .../{camera_id}/ch{channel}/error
-    # ------------------------------------------------------------------------
+    # ========================================================================
 
     if len(parts) == 8 and parts[7] == "error":
 
@@ -216,14 +218,12 @@ def parse_topic(topic: str) -> dict[str, Any]:
             "installation": installation,
             "device_id": device_id,
             "camera_id": camera_id,
-            "channel": int(channel_number),
+            "channel": channel_number,
         }
 
-    # ------------------------------------------------------------------------
+    # ========================================================================
     # Event
-    #
-    # .../{camera_id}/ch{channel}/event/{action_code}
-    # ------------------------------------------------------------------------
+    # ========================================================================
 
     if len(parts) == 9 and parts[7] == "event":
 
@@ -241,7 +241,7 @@ def parse_topic(topic: str) -> dict[str, Any]:
             "installation": installation,
             "device_id": device_id,
             "camera_id": camera_id,
-            "channel": int(channel_number),
+            "channel": channel_number,
             "action_code": action_code,
         }
 
@@ -258,18 +258,12 @@ def parse_topic(topic: str) -> dict[str, Any]:
 def parse_payload(
     payload: bytes | str | dict,
 ) -> dict[str, Any]:
-    """
-    Convert an MQTT payload into a Python dictionary.
-
-    MQTT libraries normally provide payloads as bytes.
-
-    For testing, accepting a dictionary is convenient as well.
-    """
 
     if isinstance(payload, dict):
         return payload
 
     if isinstance(payload, bytes):
+
         try:
             payload = payload.decode("utf-8")
 
@@ -308,45 +302,14 @@ def parse_mqtt_message(
     topic: str,
     payload: bytes | str | dict,
 ) -> dict[str, Any]:
-    """
-    Parse a complete MQTT message.
-
-    Returns:
-
-        {
-            "message_type": "health",
-            "country": "pt",
-            "client": "aitecserv",
-            "installation": "office2",
-            "device_id": "edge-01",
-            "camera_id": None,
-            "channel": None,
-            "source": None,
-            "action_code": None,
-            "payload": {...},
-        }
-
-    The returned structure is intentionally independent from Django
-    models and the database.
-    """
 
     parsed_topic = parse_topic(topic)
     parsed_payload = parse_payload(payload)
-
-    # ------------------------------------------------------------------------
-    # Start with the topic information.
-    # ------------------------------------------------------------------------
 
     parsed_message = {
         **parsed_topic,
         "payload": parsed_payload,
     }
-
-    # ------------------------------------------------------------------------
-    # Camera-level fields are not present on device-level messages.
-    #
-    # Adding them consistently makes the service layer easier to work with.
-    # ------------------------------------------------------------------------
 
     parsed_message.setdefault("camera_id", None)
     parsed_message.setdefault("channel", None)
@@ -365,9 +328,6 @@ def parse_message(
     topic: str,
     payload: bytes | str | dict,
 ) -> dict[str, Any]:
-    """
-    Backwards-compatible alias for parse_mqtt_message().
-    """
 
     return parse_mqtt_message(
         topic=topic,

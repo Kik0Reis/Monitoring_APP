@@ -4,11 +4,18 @@ from django.db import transaction
 from django.utils import timezone
 
 from cameras.models import Camera, CameraStatus
+
 from monitoring.models import (
     AlertSeverity,
     CameraAlert,
     CameraAlertType,
 )
+
+
+# ============================================================================
+# Camera status
+# ============================================================================
+
 
 @transaction.atomic
 def update_camera_status(
@@ -16,12 +23,6 @@ def update_camera_status(
     new_status: str,
     received_at=None,
 ) -> Camera:
-    """
-    Update camera status and last_seen.
-
-    A valid MQTT camera message proves that the camera
-    is communicating, so camera status becomes ONLINE.
-    """
 
     if received_at is None:
         received_at = timezone.now()
@@ -32,7 +33,10 @@ def update_camera_status(
         )
 
     camera.status = new_status
-    camera.last_seen = received_at
+
+    # Only update last_seen when the camera is actually communicating.
+    if new_status == CameraStatus.ONLINE:
+        camera.last_seen = received_at
 
     camera.save(
         update_fields=[
@@ -45,14 +49,16 @@ def update_camera_status(
     return camera
 
 
+# ============================================================================
+# Camera lookup
+# ============================================================================
+
+
 def get_camera(
     device,
     camera_identifier: str,
     channel: int,
 ) -> Camera | None:
-    """
-    Resolve a camera belonging to the specified Edge device.
-    """
 
     try:
         return Camera.objects.get(
@@ -66,6 +72,133 @@ def get_camera(
         return None
 
 
+def get_cameras_by_identifier(
+    device,
+    camera_identifier: str,
+) -> list[Camera]:
+
+    return list(
+        Camera.objects.filter(
+            device=device,
+            camera_identifier=camera_identifier,
+            active=True,
+        )
+    )
+
+
+# ============================================================================
+# Camera list/status message
+# ============================================================================
+
+
+@transaction.atomic
+def process_camera_status_list(
+    device,
+    payload: dict[str, Any],
+    received_at=None,
+) -> int:
+    """
+    Process:
+
+        aiaction/.../{device_id}/cameras
+
+    Example payload:
+
+        {
+            "cameras": [
+                {
+                    "camera_id": "AXIS-B8A44F957EC7",
+                    "name": "AXIS Camera - 100.69.131.11",
+                    "latitude": 50.946661,
+                    "longitude": -2.237372,
+                    "status": "offline",
+                    "seconds_since_last_seen": null
+                }
+            ]
+        }
+
+    The MQTT message itself proves the Edge is communicating.
+
+    It does NOT prove that every camera is online.
+
+    Therefore camera statuses are taken from the payload.
+    """
+
+    if received_at is None:
+        received_at = timezone.now()
+
+    cameras = payload.get(
+        "cameras",
+        [],
+    )
+
+    if not isinstance(cameras, list):
+        return 0
+
+    processed = 0
+
+    for camera_data in cameras:
+
+        if not isinstance(camera_data, dict):
+            continue
+
+        camera_identifier = camera_data.get(
+            "camera_id"
+        )
+
+        if not camera_identifier:
+            continue
+
+        raw_status = str(
+            camera_data.get(
+                "status",
+                "unknown",
+            )
+        ).lower()
+
+        if raw_status in {
+            "online",
+            "up",
+            "healthy",
+        }:
+            camera_status = CameraStatus.ONLINE
+
+        elif raw_status in {
+            "offline",
+            "down",
+            "unhealthy",
+        }:
+            camera_status = CameraStatus.OFFLINE
+
+        else:
+            camera_status = CameraStatus.UNKNOWN
+
+        matching_cameras = get_cameras_by_identifier(
+            device=device,
+            camera_identifier=camera_identifier,
+        )
+
+        if not matching_cameras:
+            continue
+
+        for camera in matching_cameras:
+
+            update_camera_status(
+                camera=camera,
+                new_status=camera_status,
+                received_at=received_at,
+            )
+
+            processed += 1
+
+    return processed
+
+
+# ============================================================================
+# Camera alerts
+# ============================================================================
+
+
 def create_camera_alert(
     camera: Camera,
     alert_type: str,
@@ -73,12 +206,6 @@ def create_camera_alert(
     payload: dict[str, Any],
     severity: str = AlertSeverity.WARNING,
 ) -> CameraAlert:
-    """
-    Create a camera alert.
-
-    If an active alert with the same type already exists,
-    reuse it instead of creating duplicates.
-    """
 
     existing_alert = CameraAlert.objects.filter(
         camera=camera,
@@ -98,18 +225,17 @@ def create_camera_alert(
     )
 
 
+# ============================================================================
+# Camera alert
+# ============================================================================
+
+
 @transaction.atomic
 def process_camera_alert(
     camera: Camera,
     payload: dict[str, Any],
     received_at=None,
 ) -> CameraAlert:
-    """
-    Process an alert generated by a camera.
-
-    Receiving the message proves the camera is communicating,
-    therefore the camera becomes ONLINE.
-    """
 
     if received_at is None:
         received_at = timezone.now()
@@ -141,7 +267,9 @@ def process_camera_alert(
     )
 
     if confidence is not None:
-        message += f", confidence={confidence}"
+        message += (
+            f", confidence={confidence}"
+        )
 
     message += ")."
 
@@ -154,6 +282,11 @@ def process_camera_alert(
     )
 
 
+# ============================================================================
+# Camera event
+# ============================================================================
+
+
 @transaction.atomic
 def process_camera_event(
     camera: Camera,
@@ -161,12 +294,6 @@ def process_camera_event(
     action_code: str,
     received_at=None,
 ) -> CameraAlert | None:
-    """
-    Process a camera event.
-
-    Events prove camera communication but do not necessarily
-    create an alert.
-    """
 
     if received_at is None:
         received_at = timezone.now()
@@ -180,18 +307,17 @@ def process_camera_event(
     return None
 
 
+# ============================================================================
+# Camera error
+# ============================================================================
+
+
 @transaction.atomic
 def process_camera_error(
     camera: Camera,
     payload: dict[str, Any],
     received_at=None,
 ) -> CameraAlert:
-    """
-    Process an error reported by a camera.
-
-    The camera remains ONLINE because it successfully
-    communicated the error.
-    """
 
     if received_at is None:
         received_at = timezone.now()

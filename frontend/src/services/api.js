@@ -145,3 +145,63 @@ export const locationsApi = {
     });
   },
 };
+
+export const devicesApi = {
+  list(params = "") {
+    return apiRequest(`/devices/${params}`);
+  },
+
+  get(id) {
+    return apiRequest(`/devices/${id}/`);
+  },
+
+  create(data) {
+    return apiRequest("/devices/", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+
+  update(id, data) {
+    return apiRequest(`/devices/${id}/`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    });
+  },
+
+  delete(id) {
+    return apiRequest(`/devices/${id}/`, {
+      method: "DELETE",
+    });
+  },
+};
+
+export const camerasApi = {
+  list(params = "") {
+    return apiRequest(`/cameras/${params}`);
+  },
+
+  get(id) {
+    return apiRequest(`/cameras/${id}/`);
+  },
+
+  create(data) {
+    return apiRequest("/cameras/", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+
+  update(id, data) {
+    return apiRequest(`/cameras/${id}/`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    });
+  },
+
+  delete(id) {
+    return apiRequest(`/cameras/${id}/`, {
+      method: "DELETE",
+    });
+  },
+};

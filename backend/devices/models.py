@@ -19,6 +19,16 @@ class Device(TimeStampedModel):
     Represents an Edge device.
 
     An Edge device can have multiple cameras connected to it.
+
+    Device.status represents the status of the Edge itself.
+
+    Internal services such as:
+
+        detectorapi
+        detector
+        idmr
+
+    are stored separately in component_statuses.
     """
 
     location = models.ForeignKey(
@@ -43,6 +53,10 @@ class Device(TimeStampedModel):
         db_index=True,
     )
 
+    # ------------------------------------------------------------------
+    # Overall Edge status
+    # ------------------------------------------------------------------
+
     status = models.CharField(
         max_length=10,
         choices=DeviceStatus.choices,
@@ -51,6 +65,40 @@ class Device(TimeStampedModel):
 
     last_seen = models.DateTimeField(
         null=True,
+        blank=True,
+    )
+
+    # ------------------------------------------------------------------
+    # Internal component statuses
+    #
+    # Example:
+    #
+    # {
+    #     "detectorapi": {
+    #         "status": "up",
+    #         "initialized": true,
+    #         "configs_loaded": true
+    #     },
+    #     "detector": {
+    #         "status": "up",
+    #         "unhealthy_cameras": []
+    #     },
+    #     "idmr": {
+    #         "status": "up",
+    #         "config_loaded": true,
+    #         "unhealthy_cameras": []
+    #     }
+    # }
+    # ------------------------------------------------------------------
+
+    component_statuses = models.JSONField(
+        default=dict,
+        blank=True,
+    )
+
+
+    health_data = models.JSONField(
+        default=dict,
         blank=True,
     )
 

@@ -3,23 +3,9 @@ Heartbeat timeout monitoring.
 
 Checks both Edge devices and Cameras for expired heartbeats.
 
-The MQTT layer is responsible for updating last_seen whenever valid
-communication is received.
+MQTT processing updates last_seen when valid communication is received.
 
-This service is responsible only for detecting when communication
-has stopped.
-
-Flow:
-
-    MQTT message
-        ↓
-    Device.last_seen / Camera.last_seen
-        ↓
-    Heartbeat monitor
-        ↓
-    timeout exceeded?
-        ↓
-    ONLINE → OFFLINE
+This service detects when communication has stopped.
 """
 
 from datetime import timedelta
@@ -35,12 +21,6 @@ from monitoring.services.device_health import (
     update_device_status,
 )
 
-# If you have camera offline-alert functionality, import it here.
-# from monitoring.services.camera_monitor import (
-#     create_camera_offline_alert,
-#     update_camera_status,
-# )
-
 
 DEFAULT_HEARTBEAT_TIMEOUT_SECONDS = 60
 
@@ -49,19 +29,13 @@ DEFAULT_HEARTBEAT_TIMEOUT_SECONDS = 60
 # Device heartbeat
 # ============================================================================
 
+
 @transaction.atomic
 def check_device_timeout(
     device: Device,
     timeout_seconds: int = DEFAULT_HEARTBEAT_TIMEOUT_SECONDS,
     now=None,
 ) -> Device:
-    """
-    Check whether an Edge device has stopped communicating.
-
-    Devices with no last_seen remain UNKNOWN.
-
-    Devices whose heartbeat has expired become OFFLINE.
-    """
 
     if now is None:
         now = timezone.now()
@@ -78,6 +52,7 @@ def check_device_timeout(
         return device
 
     if device.status != DeviceStatus.OFFLINE:
+
         update_device_status(
             device=device,
             new_status=DeviceStatus.OFFLINE,
@@ -92,19 +67,13 @@ def check_device_timeout(
 # Camera heartbeat
 # ============================================================================
 
+
 @transaction.atomic
 def check_camera_timeout(
     camera: Camera,
     timeout_seconds: int = DEFAULT_HEARTBEAT_TIMEOUT_SECONDS,
     now=None,
 ) -> Camera:
-    """
-    Check whether a camera has stopped communicating.
-
-    Cameras with no last_seen remain UNKNOWN.
-
-    Cameras whose heartbeat has expired become OFFLINE.
-    """
 
     if now is None:
         now = timezone.now()
@@ -121,6 +90,7 @@ def check_camera_timeout(
         return camera
 
     if camera.status != CameraStatus.OFFLINE:
+
         camera.status = CameraStatus.OFFLINE
 
         camera.save(
@@ -134,18 +104,14 @@ def check_camera_timeout(
 
 
 # ============================================================================
-# Check all devices
+# All devices
 # ============================================================================
+
 
 def check_all_device_timeouts(
     timeout_seconds: int = DEFAULT_HEARTBEAT_TIMEOUT_SECONDS,
     now=None,
 ) -> int:
-    """
-    Check all active Edge devices.
-
-    Returns the number of devices currently OFFLINE.
-    """
 
     if now is None:
         now = timezone.now()
@@ -175,18 +141,14 @@ def check_all_device_timeouts(
 
 
 # ============================================================================
-# Check all cameras
+# All cameras
 # ============================================================================
+
 
 def check_all_camera_timeouts(
     timeout_seconds: int = DEFAULT_HEARTBEAT_TIMEOUT_SECONDS,
     now=None,
 ) -> int:
-    """
-    Check all active cameras.
-
-    Returns the number of cameras currently OFFLINE.
-    """
 
     if now is None:
         now = timezone.now()
@@ -216,18 +178,14 @@ def check_all_camera_timeouts(
 
 
 # ============================================================================
-# Check everything
+# Everything
 # ============================================================================
+
 
 def check_all_heartbeats(
     timeout_seconds: int = DEFAULT_HEARTBEAT_TIMEOUT_SECONDS,
     now=None,
 ) -> dict[str, int]:
-    """
-    Check both Edge devices and Cameras.
-
-    This is the function that the periodic monitoring job should call.
-    """
 
     if now is None:
         now = timezone.now()
