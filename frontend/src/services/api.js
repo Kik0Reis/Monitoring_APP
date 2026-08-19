@@ -85,3 +85,63 @@ export const countriesApi = {
     });
   },
 };
+
+export const customersApi = {
+  list(params = "") {
+    return apiRequest(`/customers/${params}`);
+  },
+
+  get(id) {
+    return apiRequest(`/customers/${id}/`);
+  },
+
+  create(data) {
+    return apiRequest("/customers/", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+
+  update(id, data) {
+    return apiRequest(`/customers/${id}/`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    });
+  },
+
+  delete(id) {
+    return apiRequest(`/customers/${id}/`, {
+      method: "DELETE",
+    });
+  },
+};
+
+export const locationsApi = {
+  list(params = "") {
+    return apiRequest(`/locations/${params}`);
+  },
+
+  get(id) {
+    return apiRequest(`/locations/${id}/`);
+  },
+
+  create(data) {
+    return apiRequest("/locations/", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+
+  update(id, data) {
+    return apiRequest(`/locations/${id}/`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    });
+  },
+
+  delete(id) {
+    return apiRequest(`/locations/${id}/`, {
+      method: "DELETE",
+    });
+  },
+};
