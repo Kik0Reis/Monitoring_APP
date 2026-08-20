@@ -205,3 +205,19 @@ export const camerasApi = {
     });
   },
 };
+
+export const dashboardApi = {
+  async get() {
+    const response = await fetch(
+      `${API_BASE_URL}/dashboard/`
+    );
+
+    if (!response.ok) {
+      throw new Error(
+        "Failed to load dashboard."
+      );
+    }
+
+    return response.json();
+  },
+};

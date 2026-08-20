@@ -1,5 +1,6 @@
-from rest_framework.routers import DefaultRouter
+from rest_framework.routers import DefaultRouter, path
 
+from monitoring.views import DashboardView
 from countries.views import CountryViewSet
 from customers.views import CustomerViewSet
 from locations.views import LocationViewSet
@@ -16,4 +17,13 @@ router.register("locations", LocationViewSet)
 router.register("devices", DeviceViewSet)
 router.register("cameras", CameraViewSet)
 
-urlpatterns = router.urls
+
+urlpatterns = [
+    *router.urls,
+
+    path(
+        "dashboard/",
+        DashboardView.as_view(),
+        name="dashboard",
+    ),
+]
