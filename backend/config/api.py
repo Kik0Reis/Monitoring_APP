@@ -1,6 +1,6 @@
 from rest_framework.routers import DefaultRouter, path
 
-from monitoring.views import DashboardView
+from monitoring.views import AlertsView, DashboardView
 from countries.views import CountryViewSet
 from customers.views import CustomerViewSet
 from locations.views import LocationViewSet
@@ -25,5 +25,11 @@ urlpatterns = [
         "dashboard/",
         DashboardView.as_view(),
         name="dashboard",
+    ),
+
+    path(
+        "alerts/",
+        AlertsView.as_view(),
+        name="alerts",
     ),
 ]

@@ -1,484 +1,254 @@
-import { useEffect, useState } from "react";
-import { devicesApi, locationsApi } from "../../services/api";
-import CrudModal from "../../components/crud/CrudModal";
-import "./devices.css";
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
-const PAGE_SIZE = 5;
+import { devicesApi, locationsApi, fetchAll } from "../../services/api";
+import { useCrudResource } from "../../hooks/useCrudResource";
+import { useAutoRefresh } from "../../hooks/useAutoRefresh";
+
+import PageHeader from "../../components/common/PageHeader";
+import SearchBar from "../../components/common/SearchBar";
+import DataTable from "../../components/common/DataTable";
+import Pagination from "../../components/common/Pagination";
+import FormField from "../../components/common/FormField";
+import StatusBadge from "../../components/common/StatusBadge";
+import CrudModal from "../../components/crud/CrudModal";
+
+import "./Devices.css";
+
+const EMPTY_FORM = {
+  name: "",
+  location_id: "",
+  mqtt_identifier: "",
+  serial_number: "",
+  active: true,
+};
 
 function Devices() {
-  const [devices, setDevices] = useState([]);
+  const navigate = useNavigate();
   const [locations, setLocations] = useState([]);
-
-  const [search, setSearch] = useState("");
-
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-
-  const [modalMode, setModalMode] = useState(null);
-  const [selectedDevice, setSelectedDevice] = useState(null);
-
-  const [formData, setFormData] = useState({
-    name: "",
-    location_id: "",
-    mqtt_identifier: "",
-    serial_number: "",
-    active: true,
-  });
-
-  const [saving, setSaving] = useState(false);
-
-  async function loadDevices() {
-    try {
-      setLoading(true);
-      setError("");
-
-      const data = await devicesApi.list(
-        `?search=${encodeURIComponent(search)}`
-      );
-
-      setDevices(data.results ?? data);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function loadLocations() {
-    try {
-      const data = await locationsApi.list();
-
-      setLocations(data.results ?? data);
-    } catch (err) {
-      setError(err.message);
-    }
-  }
+  const [locationFilter, setLocationFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      loadDevices();
-    }, 300);
-
-    return () => clearTimeout(timer);
-  }, [search]);
-
-  useEffect(() => {
-    loadLocations();
+    fetchAll(locationsApi.list).then(setLocations).catch(() => {});
   }, []);
 
-  function handleSearchChange(event) {
-    setSearch(event.target.value);
-  }
+  const resource = useCrudResource({
+    api: devicesApi,
+    emptyFormData: EMPTY_FORM,
+    filters: { location: locationFilter, status: statusFilter },
+    mapFormToPayload: (formData) => ({
+      name: formData.name.trim(),
+      location_id: formData.location_id,
+      mqtt_identifier: formData.mqtt_identifier.trim(),
+      serial_number: formData.serial_number.trim(),
+      active: Boolean(formData.active),
+    }),
+    mapItemToFormData: (item) => ({
+      name: item.name,
+      location_id: item.location?.id ?? "",
+      mqtt_identifier: item.mqtt_identifier,
+      serial_number: item.serial_number,
+      active: item.active,
+    }),
+    validate: (formData) => {
+      if (!formData.name.trim()) return "Device name is required.";
+      if (!formData.location_id) return "Location is required.";
+      if (!formData.mqtt_identifier.trim()) return "MQTT identifier is required.";
+      if (!formData.serial_number.trim()) return "Serial number is required.";
+      return null;
+    },
+  });
 
-  function openCreateModal() {
-    setSelectedDevice(null);
+  const { lastUpdated, refreshing, refresh } = useAutoRefresh(resource.reload);
 
-    setFormData({
-      name: "",
-      location_id: "",
-      mqtt_identifier: "",
-      serial_number: "",
-      active: true,
-    });
+  const formFields = useMemo(
+    () => [
+      { name: "name", label: "Name", type: "text", placeholder: "Edge 01" },
+      {
+        name: "location_id",
+        label: "Location",
+        type: "select",
+        options: locations.map((l) => ({ value: l.id, label: l.name })),
+      },
+      { name: "mqtt_identifier", label: "MQTT Identifier", type: "text", placeholder: "edge-01" },
+      { name: "serial_number", label: "Serial Number", type: "text", placeholder: "EDGE-01" },
+      { name: "active", label: "Active", type: "checkbox" },
+    ],
+    [locations]
+  );
 
-    setModalMode("create");
-  }
-
-  function openViewModal(device) {
-    setSelectedDevice(device);
-    setModalMode("view");
-  }
-
-  function openEditModal(device) {
-    setSelectedDevice(device);
-
-    setFormData({
-      name: device.name,
-      location_id: device.location?.id ?? "",
-      mqtt_identifier: device.mqtt_identifier,
-      serial_number: device.serial_number,
-      active: device.active,
-    });
-
-    setModalMode("edit");
-  }
-
-  function closeModal() {
-    setModalMode(null);
-    setSelectedDevice(null);
-  }
-
-  function handleFormChange(event) {
-    const { name, value, type, checked } = event.target;
-
-    setFormData((previous) => ({
-      ...previous,
-      [name]: type === "checkbox" ? checked : value,
-    }));
-  }
-
-  async function handleSubmit() {
-    setSaving(true);
-    setError("");
-
-    try {
-      const payload = {
-        name: formData.name,
-        location_id: Number(formData.location_id),
-        mqtt_identifier: formData.mqtt_identifier,
-        serial_number: formData.serial_number,
-        active: formData.active,
-      };
-
-      if (modalMode === "create") {
-        await devicesApi.create(payload);
-      }
-
-      if (modalMode === "edit") {
-        await devicesApi.update(
-          selectedDevice.id,
-          payload
-        );
-      }
-
-      closeModal();
-      await loadDevices();
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function handleDelete(device) {
-    const confirmed = window.confirm(
-      `Are you sure you want to delete ${device.name}?`
-    );
-
-    if (!confirmed) {
-      return;
-    }
-
-    try {
-      setError("");
-
-      await devicesApi.delete(device.id);
-
-      setDevices((previous) =>
-        previous.filter(
-          (item) => item.id !== device.id
-        )
-      );
-    } catch (err) {
-      setError(err.message);
-    }
-  }
+  const columns = [
+    {
+      key: "name",
+      header: "Name",
+      render: (row) => (
+        <span className="entity-name">
+          {row.name}
+          <span className="entity-subtext">{row.location?.name}</span>
+        </span>
+      ),
+    },
+    {
+      key: "status",
+      header: "Status",
+      render: (row) => <StatusBadge status={row.status} />,
+    },
+    {
+      key: "cameras_count",
+      header: "Cameras",
+      render: (row) => row.cameras_count ?? 0,
+    },
+    {
+      key: "last_seen",
+      header: "Last Seen",
+      render: (row) =>
+        row.last_seen ? new Date(row.last_seen).toLocaleString() : "—",
+    },
+  ];
 
   return (
-    <div className="devices">
-
-      <header className="page-header">
-        <div>
-          <p className="page-eyebrow">Management</p>
-          <h1>Devices</h1>
-        </div>
-
-        <button
-          className="primary-button"
-          onClick={openCreateModal}
-        >
+    <div className="page devices">
+      <PageHeader
+        eyebrow="Management"
+        title="Devices"
+        lastUpdated={lastUpdated}
+        refreshing={refreshing}
+        onRefresh={refresh}
+      >
+        <button className="primary-button" onClick={() => resource.openCreate()}>
           + Add Device
         </button>
-      </header>
+      </PageHeader>
 
-      <div className="search-bar">
-        <input
-          type="text"
-          placeholder="Search device..."
-          value={search}
-          onChange={handleSearchChange}
+      <div className="filter-bar">
+        <SearchBar
+          value={resource.search}
+          onChange={resource.setSearch}
+          placeholder="Search devices..."
         />
-      </div>
 
-      {error && (
-        <div className="error-message">
-          {error}
-        </div>
-      )}
-
-      <div className="table-card">
-        <table className="devices-table">
-
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Location</th>
-              <th>MQTT Identifier</th>
-              <th>Serial Number</th>
-              <th>Status</th>
-              <th className="actions-col">
-                Actions
-              </th>
-            </tr>
-          </thead>
-
-          <tbody>
-
-            {loading ? (
-              <tr>
-                <td
-                  colSpan={6}
-                  className="empty-row"
-                >
-                  Loading devices...
-                </td>
-              </tr>
-            ) : devices.length === 0 ? (
-              <tr>
-                <td
-                  colSpan={6}
-                  className="empty-row"
-                >
-                  No devices found.
-                </td>
-              </tr>
-            ) : (
-              devices.map((device) => (
-                <tr
-                  key={device.id}
-                  onDoubleClick={() =>
-                    openViewModal(device)
-                  }
-                >
-
-                  <td>
-                    <span className="device-name">
-                      {device.name}
-                    </span>
-                  </td>
-
-                  <td>
-                    {device.location?.name ?? "—"}
-                  </td>
-
-                  <td>
-                    {device.mqtt_identifier}
-                  </td>
-
-                  <td>
-                    {device.serial_number}
-                  </td>
-
-                  <td>
-                    <span
-                      className={`device-status device-status-${device.status?.toLowerCase()}`}
-                    >
-                      <span className="status-dot" />
-                      {device.status}
-                    </span>
-                  </td>
-
-                  <td className="actions-col">
-
-                    <button
-                      className="icon-button"
-                      aria-label={`View ${device.name}`}
-                      onClick={() =>
-                        openViewModal(device)
-                      }
-                    >
-                      👁
-                    </button>
-
-                    <button
-                      className="icon-button"
-                      aria-label={`Edit ${device.name}`}
-                      onClick={() =>
-                        openEditModal(device)
-                      }
-                    >
-                      ✎
-                    </button>
-
-                    <button
-                      className="icon-button danger"
-                      aria-label={`Delete ${device.name}`}
-                      onClick={() =>
-                        handleDelete(device)
-                      }
-                    >
-                      🗑
-                    </button>
-
-                  </td>
-
-                </tr>
-              ))
-            )}
-
-          </tbody>
-
-        </table>
-      </div>
-
-      {modalMode && (
-        <CrudModal
-          mode={modalMode}
-          title={
-            modalMode === "create"
-              ? "Add Device"
-              : modalMode === "edit"
-              ? "Edit Device"
-              : selectedDevice?.name
-          }
-          onClose={closeModal}
-          onSubmit={handleSubmit}
-          submitLabel={
-            modalMode === "create"
-              ? "Create Device"
-              : "Save Changes"
-          }
-          loading={saving}
+        <select
+          className="filter-select"
+          value={locationFilter}
+          onChange={(event) => setLocationFilter(event.target.value)}
         >
+          <option value="">All locations</option>
+          {locations.map((location) => (
+            <option key={location.id} value={location.id}>
+              {location.name}
+            </option>
+          ))}
+        </select>
 
-          {modalMode === "view" ? (
-            <div className="device-details">
+        <select
+          className="filter-select"
+          value={statusFilter}
+          onChange={(event) => setStatusFilter(event.target.value)}
+        >
+          <option value="">All statuses</option>
+          <option value="ONLINE">Online</option>
+          <option value="OFFLINE">Offline</option>
+          <option value="UNKNOWN">Unknown</option>
+        </select>
+      </div>
 
-              <div className="detail-field">
+      {resource.error && <div className="error-message">{resource.error}</div>}
+
+      <DataTable
+        columns={columns}
+        rows={resource.items}
+        loading={resource.loading}
+        loadingMessage="Loading devices..."
+        emptyMessage="No devices found."
+        onRowClick={(device) => navigate(`/devices/${device.id}`)}
+        actions={(device) => (
+          <>
+            <button
+              className="icon-button"
+              aria-label={`View ${device.name}`}
+              onClick={() => resource.openView(device)}
+            >
+              👁
+            </button>
+            <button
+              className="icon-button"
+              aria-label={`Edit ${device.name}`}
+              onClick={() => resource.openEdit(device)}
+            >
+              ✎
+            </button>
+            <button
+              className="icon-button danger"
+              aria-label={`Delete ${device.name}`}
+              onClick={() => resource.handleDelete(device)}
+            >
+              🗑
+            </button>
+          </>
+        )}
+      />
+
+      <Pagination
+        page={resource.page}
+        setPage={resource.setPage}
+        count={resource.count}
+        hasNext={resource.hasNext}
+        hasPrevious={resource.hasPrevious}
+      />
+
+      {resource.modalMode && (
+        <CrudModal
+          mode={resource.modalMode}
+          title={
+            resource.modalMode === "create"
+              ? "Add Device"
+              : resource.modalMode === "edit"
+              ? "Edit Device"
+              : "Device Details"
+          }
+          onClose={resource.closeModal}
+          onSubmit={resource.handleSubmit}
+          loading={resource.saving}
+        >
+          {resource.modalMode === "view" ? (
+            <div className="crud-details">
+              <div className="crud-detail">
                 <span>Name</span>
-                <strong>
-                  {selectedDevice?.name}
-                </strong>
+                <strong>{resource.selected?.name}</strong>
               </div>
-
-              <div className="detail-field">
+              <div className="crud-detail">
                 <span>Location</span>
-                <strong>
-                  {selectedDevice?.location?.name ?? "—"}
-                </strong>
+                <strong>{resource.selected?.location?.name}</strong>
               </div>
-
-              <div className="detail-field">
-                <span>MQTT Identifier</span>
-                <strong>
-                  {selectedDevice?.mqtt_identifier}
-                </strong>
-              </div>
-
-              <div className="detail-field">
-                <span>Serial Number</span>
-                <strong>
-                  {selectedDevice?.serial_number}
-                </strong>
-              </div>
-
-              <div className="detail-field">
-                <span>Device Type</span>
-                <strong>
-                  {selectedDevice?.device_type}
-                </strong>
-              </div>
-
-              <div className="detail-field">
+              <div className="crud-detail">
                 <span>Status</span>
-                <strong>
-                  {selectedDevice?.status}
-                </strong>
+                <strong>{resource.selected?.status}</strong>
               </div>
-
-              <div className="detail-field">
-                <span>Last Seen</span>
-                <strong>
-                  {selectedDevice?.last_seen ?? "Never"}
-                </strong>
+              <div className="crud-detail">
+                <span>MQTT Identifier</span>
+                <strong>{resource.selected?.mqtt_identifier}</strong>
               </div>
-
-              <div className="detail-field">
-                <span>Active</span>
-                <strong>
-                  {selectedDevice?.active
-                    ? "Yes"
-                    : "No"}
-                </strong>
+              <div className="crud-detail">
+                <span>Serial Number</span>
+                <strong>{resource.selected?.serial_number}</strong>
               </div>
-
             </div>
           ) : (
             <div className="crud-form">
-
-              <label>
-                Name
-
-                <input
-                  name="name"
-                  value={formData.name}
-                  onChange={handleFormChange}
-                  placeholder="Device name"
+              {formFields.map((field) => (
+                <FormField
+                  key={field.name}
+                  field={field}
+                  value={resource.formData[field.name]}
+                  onChange={resource.handleFormChange}
+                  disabled={resource.saving}
                 />
-              </label>
-
-              <label>
-                Location
-
-                <select
-                  name="location_id"
-                  value={formData.location_id}
-                  onChange={handleFormChange}
-                >
-                  <option value="">
-                    Select location
-                  </option>
-
-                  {locations.map((location) => (
-                    <option
-                      key={location.id}
-                      value={location.id}
-                    >
-                      {location.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label>
-                MQTT Identifier
-
-                <input
-                  name="mqtt_identifier"
-                  value={formData.mqtt_identifier}
-                  onChange={handleFormChange}
-                  placeholder="edge-01"
-                />
-              </label>
-
-              <label>
-                Serial Number
-
-                <input
-                  name="serial_number"
-                  value={formData.serial_number}
-                  onChange={handleFormChange}
-                  placeholder="EDGE-001"
-                />
-              </label>
-
-              <label className="checkbox-field">
-                <input
-                  type="checkbox"
-                  name="active"
-                  checked={formData.active}
-                  onChange={handleFormChange}
-                />
-
-                Active
-              </label>
-
+              ))}
             </div>
           )}
-
         </CrudModal>
       )}
-
     </div>
   );
 }

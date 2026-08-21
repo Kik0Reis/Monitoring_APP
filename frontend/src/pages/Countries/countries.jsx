@@ -1,439 +1,162 @@
-import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+
 import { countriesApi } from "../../services/api";
-import "./countries.css";
+import { useCrudResource } from "../../hooks/useCrudResource";
+import { useAutoRefresh } from "../../hooks/useAutoRefresh";
+
+import PageHeader from "../../components/common/PageHeader";
+import SearchBar from "../../components/common/SearchBar";
+import DataTable from "../../components/common/DataTable";
+import Pagination from "../../components/common/Pagination";
+import FormField from "../../components/common/FormField";
 import CrudModal from "../../components/crud/CrudModal";
 
+import "./Countries.css";
+
+const EMPTY_FORM = { name: "", code: "" };
+
+const FORM_FIELDS = [
+  { name: "name", label: "Name", type: "text", placeholder: "Portugal" },
+  { name: "code", label: "Code", type: "text", placeholder: "PT", maxLength: 2 },
+];
+
 function Countries() {
-  const [countries, setCountries] = useState([]);
+  const navigate = useNavigate();
 
-  const [search, setSearch] = useState("");
-
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-
-  const [modalMode, setModalMode] = useState(null);
-  const [selectedCountry, setSelectedCountry] = useState(null);
-
-  const [formData, setFormData] = useState({
-    name: "",
-    code: "",
+  const resource = useCrudResource({
+    api: countriesApi,
+    emptyFormData: EMPTY_FORM,
+    mapFormToPayload: (formData) => ({
+      name: formData.name.trim(),
+      code: formData.code.trim().toUpperCase(),
+    }),
+    validate: (formData) => {
+      if (!formData.name.trim()) return "Country name is required.";
+      if (!formData.code.trim()) return "Country code is required.";
+      return null;
+    },
   });
 
-  const [saving, setSaving] = useState(false);
+  const { lastUpdated, refreshing, refresh } = useAutoRefresh(resource.reload);
 
-  // ========================================================================
-  // Load countries
-  // ========================================================================
-
-  async function loadCountries() {
-    try {
-      setLoading(true);
-      setError("");
-
-      const query = search
-        ? `?search=${encodeURIComponent(search)}`
-        : "";
-
-      const data = await countriesApi.list(query);
-
-      setCountries(data.results ?? data);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      loadCountries();
-    }, 300);
-
-    return () => clearTimeout(timer);
-  }, [search]);
-
-  // ========================================================================
-  // Search
-  // ========================================================================
-
-  function handleSearchChange(event) {
-    setSearch(event.target.value);
-  }
-
-  // ========================================================================
-  // Create
-  // ========================================================================
-
-  function openCreateModal() {
-    setSelectedCountry(null);
-
-    setFormData({
-      name: "",
-      code: "",
-    });
-
-    setError("");
-    setModalMode("create");
-  }
-
-  // ========================================================================
-  // View
-  // ========================================================================
-
-  function openViewModal(country) {
-    setSelectedCountry(country);
-    setError("");
-    setModalMode("view");
-  }
-
-  // ========================================================================
-  // Edit
-  // ========================================================================
-
-  function openEditModal(country) {
-    setSelectedCountry(country);
-
-    setFormData({
-      name: country.name,
-      code: country.code,
-    });
-
-    setError("");
-    setModalMode("edit");
-  }
-
-  // ========================================================================
-  // Close modal
-  // ========================================================================
-
-  function closeModal() {
-    if (saving) {
-      return;
-    }
-
-    setModalMode(null);
-    setSelectedCountry(null);
-
-    setFormData({
-      name: "",
-      code: "",
-    });
-  }
-
-  // ========================================================================
-  // Form
-  // ========================================================================
-
-  function handleFormChange(event) {
-    const { name, value } = event.target;
-
-    setFormData((previous) => ({
-      ...previous,
-      [name]: value,
-    }));
-  }
-
-  // ========================================================================
-  // Submit create/edit
-  // ========================================================================
-
-  async function handleSubmit() {
-    if (!formData.name.trim()) {
-      setError("Country name is required.");
-      return;
-    }
-
-    if (!formData.code.trim()) {
-      setError("Country code is required.");
-      return;
-    }
-
-    try {
-      setSaving(true);
-      setError("");
-
-      const payload = {
-        name: formData.name.trim(),
-        code: formData.code.trim().toUpperCase(),
-      };
-
-      // --------------------------------------------------------------
-      // CREATE
-      // --------------------------------------------------------------
-
-      if (modalMode === "create") {
-        await countriesApi.create(payload);
-      }
-
-      // --------------------------------------------------------------
-      // EDIT
-      // --------------------------------------------------------------
-
-      if (modalMode === "edit") {
-        await countriesApi.update(
-          selectedCountry.id,
-          payload
-        );
-      }
-
-      // --------------------------------------------------------------
-      // Close modal
-      // --------------------------------------------------------------
-
-      setModalMode(null);
-      setSelectedCountry(null);
-
-      setFormData({
-        name: "",
-        code: "",
-      });
-
-      // --------------------------------------------------------------
-      // Reload from backend
-      // --------------------------------------------------------------
-
-      await loadCountries();
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  // ========================================================================
-  // Delete
-  // ========================================================================
-
-  async function handleDelete(country) {
-    const confirmed = window.confirm(
-      `Are you sure you want to delete ${country.name}?`
-    );
-
-    if (!confirmed) {
-      return;
-    }
-
-    try {
-      setError("");
-
-      await countriesApi.delete(country.id);
-
-      await loadCountries();
-    } catch (err) {
-      setError(err.message);
-    }
-  }
-
-  // ========================================================================
-  // Render
-  // ========================================================================
+  const columns = [
+    {
+      key: "name",
+      header: "Name",
+      render: (row) => <span className="entity-name">{row.name}</span>,
+    },
+    { key: "code", header: "Code" },
+    {
+      key: "customers_count",
+      header: "Clients",
+      render: (row) => row.customers_count ?? 0,
+    },
+  ];
 
   return (
-    <div className="countries">
-      <header className="page-header">
-        <div>
-          <p className="page-eyebrow">Management</p>
-          <h1>Countries</h1>
-        </div>
-
-        <button
-          className="primary-button"
-          onClick={openCreateModal}
-        >
+    <div className="page countries">
+      <PageHeader
+        eyebrow="Management"
+        title="Countries"
+        lastUpdated={lastUpdated}
+        refreshing={refreshing}
+        onRefresh={refresh}
+      >
+        <button className="primary-button" onClick={() => resource.openCreate()}>
           + Add Country
         </button>
-      </header>
+      </PageHeader>
 
-      {/* Search */}
+      <SearchBar
+        value={resource.search}
+        onChange={resource.setSearch}
+        placeholder="Search country..."
+      />
 
-      <div className="search-bar">
-        <input
-          type="text"
-          placeholder="Search country..."
-          value={search}
-          onChange={handleSearchChange}
-        />
-      </div>
+      {resource.error && <div className="error-message">{resource.error}</div>}
 
-      {/* Error */}
+      <DataTable
+        columns={columns}
+        rows={resource.items}
+        loading={resource.loading}
+        loadingMessage="Loading countries..."
+        emptyMessage="No countries found."
+        onRowClick={(country) => navigate(`/countries/${country.id}`)}
+        actions={(country) => (
+          <>
+            <button
+              className="icon-button"
+              aria-label={`View ${country.name}`}
+              onClick={() => resource.openView(country)}
+            >
+              👁
+            </button>
+            <button
+              className="icon-button"
+              aria-label={`Edit ${country.name}`}
+              onClick={() => resource.openEdit(country)}
+            >
+              ✎
+            </button>
+            <button
+              className="icon-button danger"
+              aria-label={`Delete ${country.name}`}
+              onClick={() => resource.handleDelete(country)}
+            >
+              🗑
+            </button>
+          </>
+        )}
+      />
 
-      {error && (
-        <div className="error-message">
-          {error}
-        </div>
-      )}
+      <Pagination
+        page={resource.page}
+        setPage={resource.setPage}
+        count={resource.count}
+        hasNext={resource.hasNext}
+        hasPrevious={resource.hasPrevious}
+      />
 
-      {/* Table */}
-
-      <div className="table-card">
-        <table className="countries-table">
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Code</th>
-              <th className="actions-col">
-                Actions
-              </th>
-            </tr>
-          </thead>
-
-          <tbody>
-            {loading ? (
-              <tr>
-                <td
-                  colSpan={3}
-                  className="empty-row"
-                >
-                  Loading countries...
-                </td>
-              </tr>
-            ) : countries.length === 0 ? (
-              <tr>
-                <td
-                  colSpan={3}
-                  className="empty-row"
-                >
-                  No countries found.
-                </td>
-              </tr>
-            ) : (
-              countries.map((country) => (
-                <tr key={country.id}>
-                  <td>
-                    <span className="country-name">
-                      {country.name}
-                    </span>
-                  </td>
-
-                  <td>
-                    {country.code}
-                  </td>
-
-                  <td className="actions-col">
-
-                    {/* VIEW */}
-
-                    <button
-                      className="icon-button"
-                      aria-label={`View ${country.name}`}
-                      onClick={() =>
-                        openViewModal(country)
-                      }
-                    >
-                      👁
-                    </button>
-
-                    {/* EDIT */}
-
-                    <button
-                      className="icon-button"
-                      aria-label={`Edit ${country.name}`}
-                      onClick={() =>
-                        openEditModal(country)
-                      }
-                    >
-                      ✎
-                    </button>
-
-                    {/* DELETE */}
-
-                    <button
-                      className="icon-button danger"
-                      aria-label={`Delete ${country.name}`}
-                      onClick={() =>
-                        handleDelete(country)
-                      }
-                    >
-                      🗑
-                    </button>
-
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      {/* ================================================================== */}
-      {/* CRUD MODAL */}
-      {/* ================================================================== */}
-
-      {modalMode && (
+      {resource.modalMode && (
         <CrudModal
-          mode={modalMode}
+          mode={resource.modalMode}
           title={
-            modalMode === "create"
+            resource.modalMode === "create"
               ? "Add Country"
-              : modalMode === "edit"
+              : resource.modalMode === "edit"
               ? "Edit Country"
               : "Country Details"
           }
-          onClose={closeModal}
-          onSubmit={handleSubmit}
-          loading={saving}
+          onClose={resource.closeModal}
+          onSubmit={resource.handleSubmit}
+          loading={resource.saving}
         >
-          {modalMode === "view" ? (
+          {resource.modalMode === "view" ? (
             <div className="crud-details">
-
               <div className="crud-detail">
                 <span>Name</span>
-                <strong>
-                  {selectedCountry?.name}
-                </strong>
+                <strong>{resource.selected?.name}</strong>
               </div>
-
               <div className="crud-detail">
                 <span>Code</span>
-                <strong>
-                  {selectedCountry?.code}
-                </strong>
+                <strong>{resource.selected?.code}</strong>
               </div>
-
               <div className="crud-detail">
-                <span>ID</span>
-                <strong>
-                  {selectedCountry?.id}
-                </strong>
+                <span>Clients</span>
+                <strong>{resource.selected?.customers_count ?? 0}</strong>
               </div>
-
             </div>
           ) : (
             <div className="crud-form">
-
-              <div className="form-field">
-                <label htmlFor="country-name">
-                  Name
-                </label>
-
-                <input
-                  id="country-name"
-                  name="name"
-                  type="text"
-                  value={formData.name}
-                  onChange={handleFormChange}
-                  placeholder="Portugal"
-                  disabled={saving}
+              {FORM_FIELDS.map((field) => (
+                <FormField
+                  key={field.name}
+                  field={field}
+                  value={resource.formData[field.name]}
+                  onChange={resource.handleFormChange}
+                  disabled={resource.saving}
                 />
-              </div>
-
-              <div className="form-field">
-                <label htmlFor="country-code">
-                  Code
-                </label>
-
-                <input
-                  id="country-code"
-                  name="code"
-                  type="text"
-                  maxLength={2}
-                  value={formData.code}
-                  onChange={handleFormChange}
-                  placeholder="PT"
-                  disabled={saving}
-                />
-              </div>
-
+              ))}
             </div>
           )}
         </CrudModal>

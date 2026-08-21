@@ -1,3 +1,4 @@
+from django.db.models import Count
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters, viewsets
 
@@ -9,6 +10,8 @@ class LocationViewSet(viewsets.ModelViewSet):
     queryset = Location.objects.select_related(
         "customer",
         "customer__country",
+    ).annotate(
+        devices_count_annotation=Count("devices", distinct=True),
     )
 
     serializer_class = LocationSerializer

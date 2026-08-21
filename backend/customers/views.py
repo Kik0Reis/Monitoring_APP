@@ -1,3 +1,4 @@
+from django.db.models import Count
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters, viewsets
 
@@ -6,7 +7,10 @@ from .serializers import CustomerSerializer
 
 
 class CustomerViewSet(viewsets.ModelViewSet):
-    queryset = Customer.objects.select_related("country")
+    queryset = Customer.objects.select_related("country").annotate(
+        locations_count_annotation=Count("locations", distinct=True),
+    )
+
     serializer_class = CustomerSerializer
 
     filter_backends = [

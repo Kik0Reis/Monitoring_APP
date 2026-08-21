@@ -20,6 +20,13 @@ class CustomerSerializer(serializers.ModelSerializer):
         write_only=True,
     )
 
+    # Number of locations that belong to this customer.
+    locations_count = serializers.SerializerMethodField()
+
+    # Breadcrumb trail used by the frontend to render drilldown
+    # navigation (Country -> Customer) without extra API calls.
+    breadcrumb = serializers.SerializerMethodField()
+
     class Meta:
         model = Customer
 
@@ -30,6 +37,8 @@ class CustomerSerializer(serializers.ModelSerializer):
             "name",
             "description",
             "active",
+            "locations_count",
+            "breadcrumb",
             "created_at",
             "updated_at",
         )
@@ -39,6 +48,30 @@ class CustomerSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         )
+
+    def get_locations_count(self, obj):
+        annotated = getattr(obj, "locations_count_annotation", None)
+
+        if annotated is not None:
+            return annotated
+
+        return obj.locations.count()
+
+    def get_breadcrumb(self, obj):
+        return [
+            {
+                "type": "country",
+                "id": obj.country_id,
+                "name": obj.country.name,
+                "path": f"/countries/{obj.country_id}",
+            },
+            {
+                "type": "customer",
+                "id": obj.id,
+                "name": obj.name,
+                "path": f"/clients/{obj.id}",
+            },
+        ]
 
     def validate_name(self, value):
         """

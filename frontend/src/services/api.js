@@ -15,7 +15,8 @@ async function apiRequest(endpoint, options = {}) {
     try {
       error = await response.json();
     } catch {
-      error = null;
+      // Response body wasn't JSON (or was empty) — fall through to the
+      // generic error message below.
     }
 
     if (error?.detail) {
@@ -54,6 +55,41 @@ async function apiRequest(endpoint, options = {}) {
   }
 
   return response.json();
+}
+
+/**
+ * Fetches every page of a (potentially paginated) list endpoint.
+ *
+ * Used only to populate dropdowns (e.g. "which country does this client
+ * belong to") where we need the full set of options, not just the first
+ * page of results.
+ */
+export async function fetchAll(listFn, params = "") {
+  let url = params;
+  let results = [];
+  let guard = 0;
+
+  while (url !== null && guard < 50) {
+    const data = await listFn(url);
+
+    if (data && Array.isArray(data.results)) {
+      results = results.concat(data.results);
+
+      if (data.next) {
+        const nextUrl = new URL(data.next);
+        url = `?${nextUrl.searchParams.toString()}`;
+      } else {
+        url = null;
+      }
+    } else {
+      results = results.concat(data ?? []);
+      url = null;
+    }
+
+    guard += 1;
+  }
+
+  return results;
 }
 
 export const countriesApi = {
@@ -203,6 +239,12 @@ export const camerasApi = {
     return apiRequest(`/cameras/${id}/`, {
       method: "DELETE",
     });
+  },
+};
+
+export const alertsApi = {
+  list(params = "") {
+    return apiRequest(`/alerts/${params}`);
   },
 };
 

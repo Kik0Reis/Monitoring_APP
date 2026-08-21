@@ -1,471 +1,241 @@
-import { useEffect, useState } from "react";
-import { camerasApi, devicesApi } from "../../services/api";
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
+
+import { camerasApi, devicesApi, fetchAll } from "../../services/api";
+import { useCrudResource } from "../../hooks/useCrudResource";
+import { useAutoRefresh } from "../../hooks/useAutoRefresh";
+
+import PageHeader from "../../components/common/PageHeader";
+import SearchBar from "../../components/common/SearchBar";
+import DataTable from "../../components/common/DataTable";
+import Pagination from "../../components/common/Pagination";
+import FormField from "../../components/common/FormField";
+import StatusBadge from "../../components/common/StatusBadge";
 import CrudModal from "../../components/crud/CrudModal";
-import "./cameras.css";
+
+import "./Cameras.css";
+
+const EMPTY_FORM = {
+  name: "",
+  device_id: "",
+  camera_identifier: "",
+  channel: 1,
+  active: true,
+};
 
 function Cameras() {
-  const [cameras, setCameras] = useState([]);
+  const navigate = useNavigate();
   const [devices, setDevices] = useState([]);
-
-  const [search, setSearch] = useState("");
-
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-
-  const [modalMode, setModalMode] = useState(null);
-  const [selectedCamera, setSelectedCamera] = useState(null);
-
-  const [formData, setFormData] = useState({
-    name: "",
-    device_id: "",
-    camera_identifier: "",
-    channel: 1,
-    active: true,
-  });
-
-  const [saving, setSaving] = useState(false);
-
-  async function loadCameras() {
-    try {
-      setLoading(true);
-      setError("");
-
-      const data = await camerasApi.list(
-        `?search=${encodeURIComponent(search)}`
-      );
-
-      setCameras(data.results ?? data);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function loadDevices() {
-    try {
-      const data = await devicesApi.list();
-
-      setDevices(data.results ?? data);
-    } catch (err) {
-      setError(err.message);
-    }
-  }
+  const [deviceFilter, setDeviceFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      loadCameras();
-    }, 300);
-
-    return () => clearTimeout(timer);
-  }, [search]);
-
-  useEffect(() => {
-    loadDevices();
+    fetchAll(devicesApi.list).then(setDevices).catch(() => {});
   }, []);
 
-  function handleSearchChange(event) {
-    setSearch(event.target.value);
-  }
+  const resource = useCrudResource({
+    api: camerasApi,
+    emptyFormData: EMPTY_FORM,
+    filters: { device: deviceFilter, status: statusFilter },
+    mapFormToPayload: (formData) => ({
+      name: formData.name.trim(),
+      device_id: formData.device_id,
+      camera_identifier: formData.camera_identifier.trim(),
+      channel: Number(formData.channel) || 1,
+      active: Boolean(formData.active),
+    }),
+    mapItemToFormData: (item) => ({
+      name: item.name,
+      device_id: item.device ?? "",
+      camera_identifier: item.camera_identifier,
+      channel: item.channel,
+      active: item.active,
+    }),
+    validate: (formData) => {
+      if (!formData.name.trim()) return "Camera name is required.";
+      if (!formData.device_id) return "Device is required.";
+      if (!formData.camera_identifier.trim()) return "Camera identifier is required.";
+      return null;
+    },
+  });
 
-  function openCreateModal() {
-    setSelectedCamera(null);
+  const { lastUpdated, refreshing, refresh } = useAutoRefresh(resource.reload);
 
-    setFormData({
-      name: "",
-      device_id: "",
-      camera_identifier: "",
-      channel: 1,
-      active: true,
-    });
+  const formFields = useMemo(
+    () => [
+      { name: "name", label: "Name", type: "text", placeholder: "Office Camera 1" },
+      {
+        name: "device_id",
+        label: "Device",
+        type: "select",
+        options: devices.map((d) => ({ value: d.id, label: d.name })),
+      },
+      { name: "camera_identifier", label: "Camera Identifier", type: "text" },
+      { name: "channel", label: "Channel", type: "text", placeholder: "1" },
+      { name: "active", label: "Active", type: "checkbox" },
+    ],
+    [devices]
+  );
 
-    setModalMode("create");
-  }
-
-  function openViewModal(camera) {
-    setSelectedCamera(camera);
-    setModalMode("view");
-  }
-
-  function openEditModal(camera) {
-    setSelectedCamera(camera);
-
-    setFormData({
-      name: camera.name,
-      device_id: camera.device?.id ?? camera.device_id ?? "",
-      camera_identifier: camera.camera_identifier,
-      channel: camera.channel,
-      active: camera.active,
-    });
-
-    setModalMode("edit");
-  }
-
-  function closeModal() {
-    setModalMode(null);
-    setSelectedCamera(null);
-  }
-
-  function handleFormChange(event) {
-    const { name, value, type, checked } = event.target;
-
-    setFormData((previous) => ({
-      ...previous,
-      [name]: type === "checkbox" ? checked : value,
-    }));
-  }
-
-  async function handleSubmit() {
-    setSaving(true);
-    setError("");
-
-    try {
-      const payload = {
-        name: formData.name,
-        device_id: Number(formData.device_id),
-        camera_identifier: formData.camera_identifier,
-        channel: Number(formData.channel),
-        active: formData.active,
-      };
-
-      if (modalMode === "create") {
-        await camerasApi.create(payload);
-      }
-
-      if (modalMode === "edit") {
-        await camerasApi.update(
-          selectedCamera.id,
-          payload
-        );
-      }
-
-      closeModal();
-      await loadCameras();
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function handleDelete(camera) {
-    const confirmed = window.confirm(
-      `Are you sure you want to delete ${camera.name}?`
-    );
-
-    if (!confirmed) {
-      return;
-    }
-
-    try {
-      setError("");
-
-      await camerasApi.delete(camera.id);
-
-      setCameras((previous) =>
-        previous.filter(
-          (item) => item.id !== camera.id
-        )
-      );
-    } catch (err) {
-      setError(err.message);
-    }
-  }
+  const columns = [
+    {
+      key: "name",
+      header: "Name",
+      render: (row) => (
+        <span className="entity-name">
+          {row.name}
+          <span className="entity-subtext">{row.device_name}</span>
+        </span>
+      ),
+    },
+    { key: "channel", header: "Ch." },
+    {
+      key: "status",
+      header: "Status",
+      render: (row) => <StatusBadge status={row.status} />,
+    },
+    {
+      key: "last_seen",
+      header: "Last Seen",
+      render: (row) =>
+        row.last_seen ? new Date(row.last_seen).toLocaleString() : "—",
+    },
+  ];
 
   return (
-    <div className="cameras">
-
-      <header className="page-header">
-        <div>
-          <p className="page-eyebrow">Management</p>
-          <h1>Cameras</h1>
-        </div>
-
-        <button
-          className="primary-button"
-          onClick={openCreateModal}
-        >
+    <div className="page cameras">
+      <PageHeader
+        eyebrow="Management"
+        title="Cameras"
+        lastUpdated={lastUpdated}
+        refreshing={refreshing}
+        onRefresh={refresh}
+      >
+        <button className="primary-button" onClick={() => resource.openCreate()}>
           + Add Camera
         </button>
-      </header>
+      </PageHeader>
 
-      <div className="search-bar">
-        <input
-          type="text"
-          placeholder="Search camera..."
-          value={search}
-          onChange={handleSearchChange}
+      <div className="filter-bar">
+        <SearchBar
+          value={resource.search}
+          onChange={resource.setSearch}
+          placeholder="Search cameras..."
         />
-      </div>
 
-      {error && (
-        <div className="error-message">
-          {error}
-        </div>
-      )}
-
-      <div className="table-card">
-        <table className="cameras-table">
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Device</th>
-              <th>Identifier</th>
-              <th>Channel</th>
-              <th>Status</th>
-              <th className="actions-col">
-                Actions
-              </th>
-            </tr>
-          </thead>
-
-          <tbody>
-            {loading ? (
-              <tr>
-                <td
-                  colSpan={6}
-                  className="empty-row"
-                >
-                  Loading cameras...
-                </td>
-              </tr>
-            ) : cameras.length === 0 ? (
-              <tr>
-                <td
-                  colSpan={6}
-                  className="empty-row"
-                >
-                  No cameras found.
-                </td>
-              </tr>
-            ) : (
-              cameras.map((camera) => (
-                <tr
-                  key={camera.id}
-                  onDoubleClick={() =>
-                    openViewModal(camera)
-                  }
-                >
-                  <td>
-                    <span className="camera-name">
-                      {camera.name}
-                    </span>
-                  </td>
-
-                  <td>
-                    {camera.device_name ??
-                      camera.device?.name ??
-                      "—"}
-                  </td>
-
-                  <td>
-                    {camera.camera_identifier}
-                  </td>
-
-                  <td>
-                    {camera.channel}
-                  </td>
-
-                  <td>
-                    <span
-                      className={`camera-status camera-status-${camera.status?.toLowerCase()}`}
-                    >
-                      <span className="status-dot" />
-                      {camera.status}
-                    </span>
-                  </td>
-
-                  <td className="actions-col">
-                    <button
-                      className="icon-button"
-                      aria-label={`View ${camera.name}`}
-                      onClick={() =>
-                        openViewModal(camera)
-                      }
-                    >
-                      👁
-                    </button>
-
-                    <button
-                      className="icon-button"
-                      aria-label={`Edit ${camera.name}`}
-                      onClick={() =>
-                        openEditModal(camera)
-                      }
-                    >
-                      ✎
-                    </button>
-
-                    <button
-                      className="icon-button danger"
-                      aria-label={`Delete ${camera.name}`}
-                      onClick={() =>
-                        handleDelete(camera)
-                      }
-                    >
-                      🗑
-                    </button>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      {modalMode && (
-        <CrudModal
-          mode={modalMode}
-          title={
-            modalMode === "create"
-              ? "Add Camera"
-              : modalMode === "edit"
-              ? "Edit Camera"
-              : selectedCamera?.name
-          }
-          onClose={closeModal}
-          onSubmit={handleSubmit}
-          submitLabel={
-            modalMode === "create"
-              ? "Create Camera"
-              : "Save Changes"
-          }
-          loading={saving}
+        <select
+          className="filter-select"
+          value={deviceFilter}
+          onChange={(event) => setDeviceFilter(event.target.value)}
         >
-          {modalMode === "view" ? (
-            <div className="camera-details">
+          <option value="">All devices</option>
+          {devices.map((device) => (
+            <option key={device.id} value={device.id}>
+              {device.name}
+            </option>
+          ))}
+        </select>
 
-              <div className="detail-field">
+        <select
+          className="filter-select"
+          value={statusFilter}
+          onChange={(event) => setStatusFilter(event.target.value)}
+        >
+          <option value="">All statuses</option>
+          <option value="ONLINE">Online</option>
+          <option value="OFFLINE">Offline</option>
+          <option value="UNKNOWN">Unknown</option>
+        </select>
+      </div>
+
+      {resource.error && <div className="error-message">{resource.error}</div>}
+
+      <DataTable
+        columns={columns}
+        rows={resource.items}
+        loading={resource.loading}
+        loadingMessage="Loading cameras..."
+        emptyMessage="No cameras found."
+        onRowClick={(camera) => navigate(`/cameras/${camera.id}`)}
+        actions={(camera) => (
+          <>
+            <button
+              className="icon-button"
+              aria-label={`View ${camera.name}`}
+              onClick={() => resource.openView(camera)}
+            >
+              👁
+            </button>
+            <button
+              className="icon-button"
+              aria-label={`Edit ${camera.name}`}
+              onClick={() => resource.openEdit(camera)}
+            >
+              ✎
+            </button>
+            <button
+              className="icon-button danger"
+              aria-label={`Delete ${camera.name}`}
+              onClick={() => resource.handleDelete(camera)}
+            >
+              🗑
+            </button>
+          </>
+        )}
+      />
+
+      <Pagination
+        page={resource.page}
+        setPage={resource.setPage}
+        count={resource.count}
+        hasNext={resource.hasNext}
+        hasPrevious={resource.hasPrevious}
+      />
+
+      {resource.modalMode && (
+        <CrudModal
+          mode={resource.modalMode}
+          title={
+            resource.modalMode === "create"
+              ? "Add Camera"
+              : resource.modalMode === "edit"
+              ? "Edit Camera"
+              : "Camera Details"
+          }
+          onClose={resource.closeModal}
+          onSubmit={resource.handleSubmit}
+          loading={resource.saving}
+        >
+          {resource.modalMode === "view" ? (
+            <div className="crud-details">
+              <div className="crud-detail">
                 <span>Name</span>
-                <strong>
-                  {selectedCamera?.name}
-                </strong>
+                <strong>{resource.selected?.name}</strong>
               </div>
-
-              <div className="detail-field">
+              <div className="crud-detail">
                 <span>Device</span>
-                <strong>
-                  {selectedCamera?.device_name ??
-                    selectedCamera?.device?.name ??
-                    "—"}
-                </strong>
+                <strong>{resource.selected?.device_name}</strong>
               </div>
-
-              <div className="detail-field">
-                <span>Camera Identifier</span>
-                <strong>
-                  {selectedCamera?.camera_identifier}
-                </strong>
-              </div>
-
-              <div className="detail-field">
+              <div className="crud-detail">
                 <span>Channel</span>
-                <strong>
-                  {selectedCamera?.channel}
-                </strong>
+                <strong>{resource.selected?.channel}</strong>
               </div>
-
-              <div className="detail-field">
+              <div className="crud-detail">
                 <span>Status</span>
-                <strong>
-                  {selectedCamera?.status}
-                </strong>
+                <strong>{resource.selected?.status}</strong>
               </div>
-
-              <div className="detail-field">
-                <span>Last Seen</span>
-                <strong>
-                  {selectedCamera?.last_seen ?? "Never"}
-                </strong>
-              </div>
-
-              <div className="detail-field">
-                <span>Active</span>
-                <strong>
-                  {selectedCamera?.active
-                    ? "Yes"
-                    : "No"}
-                </strong>
-              </div>
-
             </div>
           ) : (
             <div className="crud-form">
-
-              <label>
-                Name
-
-                <input
-                  name="name"
-                  value={formData.name}
-                  onChange={handleFormChange}
-                  placeholder="Camera name"
+              {formFields.map((field) => (
+                <FormField
+                  key={field.name}
+                  field={field}
+                  value={resource.formData[field.name]}
+                  onChange={resource.handleFormChange}
+                  disabled={resource.saving}
                 />
-              </label>
-
-              <label>
-                Device
-
-                <select
-                  name="device_id"
-                  value={formData.device_id}
-                  onChange={handleFormChange}
-                >
-                  <option value="">
-                    Select device
-                  </option>
-
-                  {devices
-                    .filter(
-                      (device) =>
-                        device.active &&
-                        device.device_type === "EDGE"
-                    )
-                    .map((device) => (
-                      <option
-                        key={device.id}
-                        value={device.id}
-                      >
-                        {device.name}
-                      </option>
-                    ))}
-                </select>
-              </label>
-
-              <label>
-                Camera Identifier
-
-                <input
-                  name="camera_identifier"
-                  value={formData.camera_identifier}
-                  onChange={handleFormChange}
-                  placeholder="camera-01"
-                />
-              </label>
-
-              <label>
-                Channel
-
-                <input
-                  type="number"
-                  name="channel"
-                  min="1"
-                  value={formData.channel}
-                  onChange={handleFormChange}
-                />
-              </label>
-
-              <label className="checkbox-field">
-                <input
-                  type="checkbox"
-                  name="active"
-                  checked={formData.active}
-                  onChange={handleFormChange}
-                />
-
-                Active
-              </label>
-
+              ))}
             </div>
           )}
         </CrudModal>

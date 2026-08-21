@@ -19,6 +19,10 @@ class CameraSerializer(serializers.ModelSerializer):
         write_only=True,
     )
 
+    # Breadcrumb trail used by the frontend to render drilldown
+    # navigation (Country -> Customer -> Location -> Device -> Camera).
+    breadcrumb = serializers.SerializerMethodField()
+
     class Meta:
         model = Camera
 
@@ -33,6 +37,7 @@ class CameraSerializer(serializers.ModelSerializer):
             "status",
             "last_seen",
             "active",
+            "breadcrumb",
             "created_at",
             "updated_at",
         )
@@ -46,6 +51,45 @@ class CameraSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         )
+
+    def get_breadcrumb(self, obj):
+        device = obj.device
+        location = device.location
+        customer = location.customer
+        country = customer.country
+
+        return [
+            {
+                "type": "country",
+                "id": country.id,
+                "name": country.name,
+                "path": f"/countries/{country.id}",
+            },
+            {
+                "type": "customer",
+                "id": customer.id,
+                "name": customer.name,
+                "path": f"/clients/{customer.id}",
+            },
+            {
+                "type": "location",
+                "id": location.id,
+                "name": location.name,
+                "path": f"/locations/{location.id}",
+            },
+            {
+                "type": "device",
+                "id": device.id,
+                "name": device.name,
+                "path": f"/devices/{device.id}",
+            },
+            {
+                "type": "camera",
+                "id": obj.id,
+                "name": obj.name,
+                "path": f"/cameras/{obj.id}",
+            },
+        ]
 
     def validate_name(self, value):
         value = value.strip()

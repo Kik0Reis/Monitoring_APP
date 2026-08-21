@@ -1,0 +1,10 @@
+/* Page-specific tweaks only — shared styles live in src/styles/common.css. */
+.alerts-filter-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-sm);
+  color: var(--color-ink-soft);
+  font-weight: var(--weight-medium);
+}
+
