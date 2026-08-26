@@ -9,12 +9,14 @@ class CustomerAdmin(admin.ModelAdmin):
         "name",
         "country",
         "active",
+        "pending_review",
         "created_at",
     )
 
     list_filter = (
         "country",
         "active",
+        "pending_review",
     )
 
     search_fields = (

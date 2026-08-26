@@ -9,6 +9,7 @@ import PageHeader from "../../components/common/PageHeader";
 import Breadcrumbs from "../../components/common/Breadcrumbs";
 import DataTable from "../../components/common/DataTable";
 import FormField from "../../components/common/FormField";
+import PendingReviewBadge from "../../components/common/PendingReviewBadge";
 import StatusBadge from "../../components/common/StatusBadge";
 import CrudModal from "../../components/crud/CrudModal";
 
@@ -71,7 +72,12 @@ function CountryDetail() {
     {
       key: "name",
       header: "Name",
-      render: (row) => <span className="entity-name">{row.name}</span>,
+      render: (row) => (
+        <span className="entity-name">
+          {row.name}
+          {row.pending_review && <PendingReviewBadge />}
+        </span>
+      ),
     },
     {
       key: "locations_count",
@@ -85,6 +91,20 @@ function CountryDetail() {
     },
   ];
 
+  async function handleApproveCountry() {
+    try {
+      await countriesApi.approve(country.id);
+      await loadCountry();
+    } catch {
+      // Best-effort; the badge just stays visible if this fails.
+    }
+  }
+
+  async function handleApproveCustomer(item) {
+    await customersApi.approve(item.id);
+    await customers.reload();
+  }
+
   return (
     <div className="page">
       <Breadcrumbs trail={[]} trailingLabel={country?.name ?? "..."} />
@@ -95,7 +115,13 @@ function CountryDetail() {
         lastUpdated={lastUpdated}
         refreshing={refreshing}
         onRefresh={refresh}
-      />
+      >
+        {country?.pending_review && (
+          <button className="secondary-button" onClick={handleApproveCountry}>
+            Approve
+          </button>
+        )}
+      </PageHeader>
 
       {country && (
         <div className="detail-summary">
@@ -103,6 +129,7 @@ function CountryDetail() {
             <div>
               <div className="detail-summary-title">
                 <h2>{country.name}</h2>
+                {country.pending_review && <PendingReviewBadge />}
               </div>
 
               <div className="detail-summary-meta">
@@ -139,6 +166,15 @@ function CountryDetail() {
           onRowClick={(client) => navigate(`/clients/${client.id}`)}
           actions={(client) => (
             <>
+              {client.pending_review && (
+                <button
+                  className="icon-button"
+                  title="Approve"
+                  onClick={() => handleApproveCustomer(client)}
+                >
+                  ✓
+                </button>
+              )}
               <button className="icon-button" onClick={() => customers.openEdit(client)}>
                 ✎
               </button>

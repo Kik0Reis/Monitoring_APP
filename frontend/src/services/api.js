@@ -92,6 +92,19 @@ export async function fetchAll(listFn, params = "") {
   return results;
 }
 
+/**
+ * Shared "approve" action for resources that can be auto-provisioned
+ * from MQTT (countries/customers/locations/devices) and therefore carry
+ * a pending_review flag. Confirms a human has looked at the record.
+ */
+function makeApprove(resourcePath) {
+  return function approve(id) {
+    return apiRequest(`/${resourcePath}/${id}/approve/`, {
+      method: "POST",
+    });
+  };
+}
+
 export const countriesApi = {
   list(params = "") {
     return apiRequest(`/countries/${params}`);
@@ -120,6 +133,8 @@ export const countriesApi = {
       method: "DELETE",
     });
   },
+
+  approve: makeApprove("countries"),
 };
 
 export const customersApi = {
@@ -150,6 +165,8 @@ export const customersApi = {
       method: "DELETE",
     });
   },
+
+  approve: makeApprove("customers"),
 };
 
 export const locationsApi = {
@@ -180,6 +197,8 @@ export const locationsApi = {
       method: "DELETE",
     });
   },
+
+  approve: makeApprove("locations"),
 };
 
 export const devicesApi = {
@@ -210,6 +229,8 @@ export const devicesApi = {
       method: "DELETE",
     });
   },
+
+  approve: makeApprove("devices"),
 };
 
 export const camerasApi = {
@@ -242,9 +263,19 @@ export const camerasApi = {
   },
 };
 
-export const alertsApi = {
+// Device/camera health & connectivity problems (offline, unhealthy
+// component, MQTT/system errors, camera errors). Active-only by default.
+export const problemsApi = {
   list(params = "") {
-    return apiRequest(`/alerts/${params}`);
+    return apiRequest(`/problems/${params}`);
+  },
+};
+
+// Real camera detections reported over MQTT (smoke, person, etc.). Plain
+// chronological event log, no active/resolved concept.
+export const detectionsApi = {
+  list(params = "") {
+    return apiRequest(`/detections/${params}`);
   },
 };
 

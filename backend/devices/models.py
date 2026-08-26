@@ -43,7 +43,6 @@ class Device(TimeStampedModel):
 
     mqtt_identifier = models.CharField(
         max_length=150,
-        unique=True,
         db_index=True,
     )
 
@@ -113,6 +112,14 @@ class Device(TimeStampedModel):
         default=True,
     )
 
+    # True for devices auto-created from an MQTT topic that didn't match
+    # any existing device. Fully functional either way — this is just a
+    # UI flag so a human can confirm/rename it and fill in its real
+    # serial number (auto-created devices get a placeholder).
+    pending_review = models.BooleanField(
+        default=False,
+    )
+
     class Meta:
         ordering = ["name"]
         verbose_name = "Device"
@@ -122,6 +129,16 @@ class Device(TimeStampedModel):
             models.UniqueConstraint(
                 fields=["location", "name"],
                 name="unique_device_name_per_location",
+            ),
+            # mqtt_identifier is only guaranteed unique WITHIN a location,
+            # not globally — two different customers can legitimately
+            # both have a device whose MQTT topic calls it "01". Messages
+            # are routed using the full country/client/installation/
+            # device_id path (see mqtt/provisioning.py), never a bare
+            # device_id lookup.
+            models.UniqueConstraint(
+                fields=["location", "mqtt_identifier"],
+                name="unique_device_mqtt_identifier_per_location",
             ),
         ]
 

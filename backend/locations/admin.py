@@ -9,12 +9,14 @@ class LocationAdmin(admin.ModelAdmin):
         "name",
         "customer",
         "active",
+        "pending_review",
         "created_at",
     )
 
     list_filter = (
         "customer",
         "active",
+        "pending_review",
     )
 
     search_fields = (

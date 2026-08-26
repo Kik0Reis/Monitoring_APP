@@ -19,12 +19,14 @@ class CountrySerializer(serializers.ModelSerializer):
             "name",
             "code",
             "customers_count",
+            "pending_review",
             "created_at",
             "updated_at",
         )
 
         read_only_fields = (
             "id",
+            "pending_review",
             "created_at",
             "updated_at",
         )

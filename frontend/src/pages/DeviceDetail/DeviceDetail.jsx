@@ -10,6 +10,7 @@ import Breadcrumbs from "../../components/common/Breadcrumbs";
 import DataTable from "../../components/common/DataTable";
 import FormField from "../../components/common/FormField";
 import StatusBadge from "../../components/common/StatusBadge";
+import PendingReviewBadge from "../../components/common/PendingReviewBadge";
 import CrudModal from "../../components/crud/CrudModal";
 
 const EMPTY_FORM = { name: "", camera_identifier: "", channel: 1, active: true };
@@ -208,7 +209,23 @@ function DeviceDetail() {
         lastUpdated={lastUpdated}
         refreshing={refreshing}
         onRefresh={refresh}
-      />
+      >
+        {device?.pending_review && (
+          <button
+            className="secondary-button"
+            onClick={async () => {
+              try {
+                await devicesApi.approve(device.id);
+                await loadDevice();
+              } catch {
+                // Best-effort; the badge just stays visible if this fails.
+              }
+            }}
+          >
+            Approve
+          </button>
+        )}
+      </PageHeader>
 
       {device && (
         <div className="detail-summary">
@@ -217,6 +234,7 @@ function DeviceDetail() {
               <div className="detail-summary-title">
                 <h2>{device.name}</h2>
                 <StatusBadge status={device.status} />
+                {device.pending_review && <PendingReviewBadge />}
               </div>
 
               <div className="detail-summary-meta">

@@ -10,6 +10,7 @@ import Breadcrumbs from "../../components/common/Breadcrumbs";
 import DataTable from "../../components/common/DataTable";
 import FormField from "../../components/common/FormField";
 import StatusBadge from "../../components/common/StatusBadge";
+import PendingReviewBadge from "../../components/common/PendingReviewBadge";
 import CrudModal from "../../components/crud/CrudModal";
 
 const EMPTY_FORM = { name: "", description: "", active: true };
@@ -71,7 +72,12 @@ function CustomerDetail() {
     {
       key: "name",
       header: "Name",
-      render: (row) => <span className="entity-name">{row.name}</span>,
+      render: (row) => (
+        <span className="entity-name">
+          {row.name}
+          {row.pending_review && <PendingReviewBadge />}
+        </span>
+      ),
     },
     {
       key: "devices_count",
@@ -84,6 +90,20 @@ function CustomerDetail() {
       render: (row) => <StatusBadge status={row.active ? "active" : "inactive"} />,
     },
   ];
+
+  async function handleApproveCustomer() {
+    try {
+      await customersApi.approve(customer.id);
+      await loadCustomer();
+    } catch {
+      // Best-effort; the badge just stays visible if this fails.
+    }
+  }
+
+  async function handleApproveLocation(item) {
+    await locationsApi.approve(item.id);
+    await locations.reload();
+  }
 
   return (
     <div className="page">
@@ -98,7 +118,13 @@ function CustomerDetail() {
         lastUpdated={lastUpdated}
         refreshing={refreshing}
         onRefresh={refresh}
-      />
+      >
+        {customer?.pending_review && (
+          <button className="secondary-button" onClick={handleApproveCustomer}>
+            Approve
+          </button>
+        )}
+      </PageHeader>
 
       {customer && (
         <div className="detail-summary">
@@ -107,6 +133,7 @@ function CustomerDetail() {
               <div className="detail-summary-title">
                 <h2>{customer.name}</h2>
                 <StatusBadge status={customer.active ? "active" : "inactive"} />
+                {customer.pending_review && <PendingReviewBadge />}
               </div>
 
               <div className="detail-summary-meta">
@@ -149,6 +176,15 @@ function CustomerDetail() {
           onRowClick={(location) => navigate(`/locations/${location.id}`)}
           actions={(location) => (
             <>
+              {location.pending_review && (
+                <button
+                  className="icon-button"
+                  title="Approve"
+                  onClick={() => handleApproveLocation(location)}
+                >
+                  ✓
+                </button>
+              )}
               <button className="icon-button" onClick={() => locations.openEdit(location)}>
                 ✎
               </button>

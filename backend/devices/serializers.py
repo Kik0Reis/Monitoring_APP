@@ -69,6 +69,7 @@ class DeviceSerializer(serializers.ModelSerializer):
             "latest_heartbeat",
             "cameras_count",
             "breadcrumb",
+            "pending_review",
             "created_at",
             "updated_at",
         )
@@ -80,6 +81,7 @@ class DeviceSerializer(serializers.ModelSerializer):
             "last_seen",
             "component_statuses",
             "health_data",
+            "pending_review",
             "created_at",
             "updated_at",
         )

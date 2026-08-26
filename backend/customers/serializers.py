@@ -39,12 +39,14 @@ class CustomerSerializer(serializers.ModelSerializer):
             "active",
             "locations_count",
             "breadcrumb",
+            "pending_review",
             "created_at",
             "updated_at",
         )
 
         read_only_fields = (
             "id",
+            "pending_review",
             "created_at",
             "updated_at",
         )

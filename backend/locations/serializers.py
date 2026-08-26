@@ -39,12 +39,14 @@ class LocationSerializer(serializers.ModelSerializer):
             "active",
             "devices_count",
             "breadcrumb",
+            "pending_review",
             "created_at",
             "updated_at",
         )
 
         read_only_fields = (
             "id",
+            "pending_review",
             "created_at",
             "updated_at",
         )

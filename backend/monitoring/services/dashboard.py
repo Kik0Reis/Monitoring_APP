@@ -13,7 +13,7 @@ from django.db.models import Count, Q
 from cameras.models import Camera, CameraStatus
 from devices.models import Device, DeviceStatus
 from locations.models import Location
-from monitoring.models import CameraAlert, DeviceAlert
+from monitoring.models import CameraAlert, CameraAlertType, DeviceAlert
 
 
 # ============================================================================
@@ -38,26 +38,73 @@ def get_dashboard_summary():
 
 
 # ============================================================================
-# Recent alerts
+# Problems (device/camera health & connectivity issues)
+#
+# "Problem" alerts have an active/resolved lifecycle: the backend reuses
+# the same alert row while a device stays offline (see create_offline_alert
+# / create_health_alert), so filtering to active_only=True naturally shows
+# exactly one row per device/camera that currently needs attention. With
+# active_only=False you get the full history, including old, resolved
+# alerts from devices that have flapped online/offline repeatedly.
 # ============================================================================
 
 
-def get_recent_alerts(limit=10):
+def get_problem_alerts(limit=10, active_only=True):
     """
-    Return the most recent device and camera alerts, newest first.
+    Return device/camera health & connectivity problems, newest first.
 
-    DeviceAlert and CameraAlert are separate models, so we fetch a bounded
-    number of rows from each and merge them in Python.
+    Includes: DeviceAlert (all types) and CameraAlert of type
+    CAMERA_ERROR. Does NOT include CameraAlert of type CAMERA_ALERT
+    (those are real-world detections, see get_camera_detections below).
     """
 
     device_alerts = (
         DeviceAlert.objects
         .select_related("device", "device__location")
-        .order_by("-created_at")[:limit]
     )
 
+    camera_error_alerts = (
+        CameraAlert.objects
+        .filter(alert_type=CameraAlertType.CAMERA_ERROR)
+        .select_related(
+            "camera",
+            "camera__device",
+            "camera__device__location",
+        )
+    )
+
+    if active_only:
+        device_alerts = device_alerts.filter(active=True)
+        camera_error_alerts = camera_error_alerts.filter(active=True)
+
+    device_alerts = device_alerts.order_by("-created_at")[:limit]
+    camera_error_alerts = camera_error_alerts.order_by("-created_at")[:limit]
+
+    alerts = _serialize_device_alerts(device_alerts)
+    alerts += _serialize_camera_alerts(camera_error_alerts)
+
+    alerts.sort(key=lambda alert: alert["created_at"], reverse=True)
+    alerts = alerts[:limit]
+
+    for alert in alerts:
+        alert["created_at"] = alert["created_at"].isoformat()
+
+    return alerts
+
+
+# ============================================================================
+# Detections (real events reported by a camera over MQTT, e.g. smoke,
+# person, or other AI-detected events)
+#
+# These are a chronological event log, not a "currently broken" list, so
+# there's no active/resolved filtering here — every detection is shown.
+# ============================================================================
+
+
+def get_camera_detections(limit=50):
     camera_alerts = (
         CameraAlert.objects
+        .filter(alert_type=CameraAlertType.CAMERA_ALERT)
         .select_related(
             "camera",
             "camera__device",
@@ -66,14 +113,21 @@ def get_recent_alerts(limit=10):
         .order_by("-created_at")[:limit]
     )
 
+    alerts = _serialize_camera_alerts(camera_alerts)
+
+    for alert in alerts:
+        alert["created_at"] = alert["created_at"].isoformat()
+
+    return alerts
+
+
+def _serialize_device_alerts(device_alerts):
     alert_type_labels = {
         "DEVICE_OFFLINE": "Offline",
         "DEVICE_HEALTH": "Health",
         "DEVICE_ERROR": "Device",
         "MQTT_ERROR": "MQTT",
         "SYSTEM_ERROR": "System",
-        "CAMERA_ALERT": "Camera",
-        "CAMERA_ERROR": "Camera Error",
     }
 
     alerts = []
@@ -97,18 +151,29 @@ def get_recent_alerts(limit=10):
             "created_at": alert.created_at,
         })
 
+    return alerts
+
+
+def _serialize_camera_alerts(camera_alerts):
+    alert_type_labels = {
+        "CAMERA_ALERT": "Camera",
+        "CAMERA_ERROR": "Camera Error",
+    }
+
+    alerts = []
+
     for alert in camera_alerts:
         camera = alert.camera
         device = camera.device
-        location = device.location
+        location = device.location if device else None
 
         alerts.append({
             "id": f"camera-{alert.id}",
             "type": alert_type_labels.get(alert.alert_type, "Camera"),
             "alert_type": alert.alert_type,
             "severity": alert.severity,
-            "device_id": device.id,
-            "device_name": device.name,
+            "device_id": device.id if device else None,
+            "device_name": device.name if device else None,
             "location_id": location.id if location else None,
             "location_name": location.name if location else None,
             "camera_id": camera.id,
@@ -117,13 +182,6 @@ def get_recent_alerts(limit=10):
             "active": alert.active,
             "created_at": alert.created_at,
         })
-
-    alerts.sort(key=lambda alert: alert["created_at"], reverse=True)
-
-    alerts = alerts[:limit]
-
-    for alert in alerts:
-        alert["created_at"] = alert["created_at"].isoformat()
 
     return alerts
 
@@ -374,7 +432,11 @@ def get_dashboard_data():
 
     return {
         "summary": get_dashboard_summary(),
-        "recent_alerts": get_recent_alerts(),
+        # Active-only, deduped problems: the backend reuses a single alert
+        # row while something stays broken, so this naturally shows one
+        # entry per currently-broken device/camera instead of repeating a
+        # flapping device's entire history.
+        "recent_problems": get_problem_alerts(limit=10, active_only=True),
         "devices_with_problems": get_devices_with_problems(),
         "locations_with_problems": get_locations_with_problems(),
     }

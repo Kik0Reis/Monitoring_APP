@@ -11,6 +11,7 @@ import DataTable from "../../components/common/DataTable";
 import Pagination from "../../components/common/Pagination";
 import FormField from "../../components/common/FormField";
 import StatusBadge from "../../components/common/StatusBadge";
+import PendingReviewBadge from "../../components/common/PendingReviewBadge";
 import CrudModal from "../../components/crud/CrudModal";
 
 import "./Clients.css";
@@ -78,6 +79,7 @@ function Clients() {
       render: (row) => (
         <span className="entity-name">
           {row.name}
+          {row.pending_review && <PendingReviewBadge />}
           <span className="entity-subtext">{row.country?.name}</span>
         </span>
       ),
@@ -93,6 +95,15 @@ function Clients() {
       render: (row) => <StatusBadge status={row.active ? "active" : "inactive"} />,
     },
   ];
+
+  async function handleApprove(client) {
+    try {
+      await customersApi.approve(client.id);
+      await resource.reload();
+    } catch (err) {
+      resource.setError(err.message);
+    }
+  }
 
   return (
     <div className="page clients">
@@ -140,6 +151,16 @@ function Clients() {
         onRowClick={(client) => navigate(`/clients/${client.id}`)}
         actions={(client) => (
           <>
+            {client.pending_review && (
+              <button
+                className="icon-button"
+                aria-label={`Approve ${client.name}`}
+                title="Approve"
+                onClick={() => handleApprove(client)}
+              >
+                ✓
+              </button>
+            )}
             <button
               className="icon-button"
               aria-label={`View ${client.name}`}

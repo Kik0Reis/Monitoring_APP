@@ -10,6 +10,7 @@ import Breadcrumbs from "../../components/common/Breadcrumbs";
 import DataTable from "../../components/common/DataTable";
 import FormField from "../../components/common/FormField";
 import StatusBadge from "../../components/common/StatusBadge";
+import PendingReviewBadge from "../../components/common/PendingReviewBadge";
 import CrudModal from "../../components/crud/CrudModal";
 
 const EMPTY_FORM = {
@@ -81,7 +82,12 @@ function LocationDetail() {
     {
       key: "name",
       header: "Name",
-      render: (row) => <span className="entity-name">{row.name}</span>,
+      render: (row) => (
+        <span className="entity-name">
+          {row.name}
+          {row.pending_review && <PendingReviewBadge />}
+        </span>
+      ),
     },
     {
       key: "status",
@@ -101,6 +107,20 @@ function LocationDetail() {
     },
   ];
 
+  async function handleApproveLocation() {
+    try {
+      await locationsApi.approve(location.id);
+      await loadLocation();
+    } catch {
+      // Best-effort; the badge just stays visible if this fails.
+    }
+  }
+
+  async function handleApproveDevice(item) {
+    await devicesApi.approve(item.id);
+    await devices.reload();
+  }
+
   return (
     <div className="page">
       <Breadcrumbs
@@ -114,7 +134,13 @@ function LocationDetail() {
         lastUpdated={lastUpdated}
         refreshing={refreshing}
         onRefresh={refresh}
-      />
+      >
+        {location?.pending_review && (
+          <button className="secondary-button" onClick={handleApproveLocation}>
+            Approve
+          </button>
+        )}
+      </PageHeader>
 
       {location && (
         <div className="detail-summary">
@@ -123,6 +149,7 @@ function LocationDetail() {
               <div className="detail-summary-title">
                 <h2>{location.name}</h2>
                 <StatusBadge status={location.active ? "active" : "inactive"} />
+                {location.pending_review && <PendingReviewBadge />}
               </div>
 
               <div className="detail-summary-meta">
@@ -165,6 +192,15 @@ function LocationDetail() {
           onRowClick={(device) => navigate(`/devices/${device.id}`)}
           actions={(device) => (
             <>
+              {device.pending_review && (
+                <button
+                  className="icon-button"
+                  title="Approve"
+                  onClick={() => handleApproveDevice(device)}
+                >
+                  ✓
+                </button>
+              )}
               <button className="icon-button" onClick={() => devices.openEdit(device)}>
                 ✎
               </button>

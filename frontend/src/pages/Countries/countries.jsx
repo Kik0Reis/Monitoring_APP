@@ -9,6 +9,7 @@ import SearchBar from "../../components/common/SearchBar";
 import DataTable from "../../components/common/DataTable";
 import Pagination from "../../components/common/Pagination";
 import FormField from "../../components/common/FormField";
+import PendingReviewBadge from "../../components/common/PendingReviewBadge";
 import CrudModal from "../../components/crud/CrudModal";
 
 import "./Countries.css";
@@ -43,7 +44,12 @@ function Countries() {
     {
       key: "name",
       header: "Name",
-      render: (row) => <span className="entity-name">{row.name}</span>,
+      render: (row) => (
+        <span className="entity-name">
+          {row.name}
+          {row.pending_review && <PendingReviewBadge />}
+        </span>
+      ),
     },
     { key: "code", header: "Code" },
     {
@@ -52,6 +58,15 @@ function Countries() {
       render: (row) => row.customers_count ?? 0,
     },
   ];
+
+  async function handleApprove(country) {
+    try {
+      await countriesApi.approve(country.id);
+      await resource.reload();
+    } catch (err) {
+      resource.setError(err.message);
+    }
+  }
 
   return (
     <div className="page countries">
@@ -84,6 +99,16 @@ function Countries() {
         onRowClick={(country) => navigate(`/countries/${country.id}`)}
         actions={(country) => (
           <>
+            {country.pending_review && (
+              <button
+                className="icon-button"
+                aria-label={`Approve ${country.name}`}
+                title="Approve"
+                onClick={() => handleApprove(country)}
+              >
+                ✓
+              </button>
+            )}
             <button
               className="icon-button"
               aria-label={`View ${country.name}`}

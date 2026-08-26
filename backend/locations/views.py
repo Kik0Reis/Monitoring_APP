@@ -1,6 +1,8 @@
 from django.db.models import Count
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters, viewsets
+from rest_framework.decorators import action
+from rest_framework.response import Response
 
 from .models import Location
 from .serializers import LocationSerializer
@@ -25,6 +27,7 @@ class LocationViewSet(viewsets.ModelViewSet):
     filterset_fields = [
         "customer",
         "active",
+        "pending_review",
     ]
 
     search_fields = [
@@ -40,3 +43,16 @@ class LocationViewSet(viewsets.ModelViewSet):
     ordering = [
         "name",
     ]
+
+    @action(detail=True, methods=["post"])
+    def approve(self, request, pk=None):
+        """
+        Clear pending_review on a location that was auto-created from an
+        MQTT topic, confirming a human has looked at it.
+        """
+
+        location = self.get_object()
+        location.pending_review = False
+        location.save(update_fields=["pending_review", "updated_at"])
+
+        return Response(self.get_serializer(location).data)

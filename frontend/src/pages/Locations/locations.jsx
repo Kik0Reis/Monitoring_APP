@@ -11,6 +11,7 @@ import DataTable from "../../components/common/DataTable";
 import Pagination from "../../components/common/Pagination";
 import FormField from "../../components/common/FormField";
 import StatusBadge from "../../components/common/StatusBadge";
+import PendingReviewBadge from "../../components/common/PendingReviewBadge";
 import CrudModal from "../../components/crud/CrudModal";
 
 import "./Locations.css";
@@ -78,6 +79,7 @@ function Locations() {
       render: (row) => (
         <span className="entity-name">
           {row.name}
+          {row.pending_review && <PendingReviewBadge />}
           <span className="entity-subtext">{row.customer?.name}</span>
         </span>
       ),
@@ -93,6 +95,15 @@ function Locations() {
       render: (row) => <StatusBadge status={row.active ? "active" : "inactive"} />,
     },
   ];
+
+  async function handleApprove(location) {
+    try {
+      await locationsApi.approve(location.id);
+      await resource.reload();
+    } catch (err) {
+      resource.setError(err.message);
+    }
+  }
 
   return (
     <div className="page locations">
@@ -140,6 +151,16 @@ function Locations() {
         onRowClick={(location) => navigate(`/locations/${location.id}`)}
         actions={(location) => (
           <>
+            {location.pending_review && (
+              <button
+                className="icon-button"
+                aria-label={`Approve ${location.name}`}
+                title="Approve"
+                onClick={() => handleApprove(location)}
+              >
+                ✓
+              </button>
+            )}
             <button
               className="icon-button"
               aria-label={`View ${location.name}`}

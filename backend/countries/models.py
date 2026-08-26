@@ -20,6 +20,14 @@ class Country(TimeStampedModel):
         unique=True,
     )
 
+    # True for countries auto-created from an MQTT topic that didn't match
+    # any existing country. The record is fully functional either way —
+    # this is just a UI flag so a human can confirm/rename it, since it
+    # was created from untrusted network input rather than deliberately.
+    pending_review = models.BooleanField(
+        default=False,
+    )
+
     class Meta:
         ordering = ["name"]
         verbose_name = "Country"

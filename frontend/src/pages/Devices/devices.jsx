@@ -11,6 +11,7 @@ import DataTable from "../../components/common/DataTable";
 import Pagination from "../../components/common/Pagination";
 import FormField from "../../components/common/FormField";
 import StatusBadge from "../../components/common/StatusBadge";
+import PendingReviewBadge from "../../components/common/PendingReviewBadge";
 import CrudModal from "../../components/crud/CrudModal";
 
 import "./Devices.css";
@@ -62,6 +63,15 @@ function Devices() {
 
   const { lastUpdated, refreshing, refresh } = useAutoRefresh(resource.reload);
 
+  async function handleApprove(device) {
+    try {
+      await devicesApi.approve(device.id);
+      await resource.reload();
+    } catch (err) {
+      resource.setError(err.message);
+    }
+  }
+
   const formFields = useMemo(
     () => [
       { name: "name", label: "Name", type: "text", placeholder: "Edge 01" },
@@ -85,6 +95,7 @@ function Devices() {
       render: (row) => (
         <span className="entity-name">
           {row.name}
+          {row.pending_review && <PendingReviewBadge />}
           <span className="entity-subtext">{row.location?.name}</span>
         </span>
       ),
@@ -164,6 +175,16 @@ function Devices() {
         onRowClick={(device) => navigate(`/devices/${device.id}`)}
         actions={(device) => (
           <>
+            {device.pending_review && (
+              <button
+                className="icon-button"
+                aria-label={`Approve ${device.name}`}
+                title="Approve"
+                onClick={() => handleApprove(device)}
+              >
+                ✓
+              </button>
+            )}
             <button
               className="icon-button"
               aria-label={`View ${device.name}`}

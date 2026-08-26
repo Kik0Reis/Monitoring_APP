@@ -21,12 +21,12 @@ This module does NOT:
 
 import logging
 
-from devices.models import Device
-
 from mqtt.parser import (
     MQTTParserError,
     parse_mqtt_message,
 )
+
+from mqtt.provisioning import resolve_device
 
 from monitoring.services.device_health import (
     process_device_health,
@@ -43,33 +43,6 @@ from monitoring.services.camera_monitor import (
 
 
 logger = logging.getLogger(__name__)
-
-
-# ============================================================================
-# Edge lookup
-# ============================================================================
-
-
-def get_device(
-    device_id: str,
-) -> Device | None:
-
-    try:
-
-        return Device.objects.get(
-            mqtt_identifier=device_id,
-            active=True,
-            device_type="EDGE",
-        )
-
-    except Device.DoesNotExist:
-
-        logger.warning(
-            "Received MQTT message for unknown Edge device: %s",
-            device_id,
-        )
-
-        return None
 
 
 # ============================================================================
@@ -108,22 +81,39 @@ def process_mqtt_message(
         return None
 
     message_type = parsed_message["message_type"]
+    country_code = parsed_message["country"]
+    client_key = parsed_message["client"]
+    installation_key = parsed_message["installation"]
     device_id = parsed_message["device_id"]
     payload_data = parsed_message["payload"]
     source = parsed_message.get("source")
 
     # ========================================================================
-    # Resolve Edge
+    # Resolve (and auto-provision, if needed) the Country/Customer/
+    # Location/Device tree.
+    #
+    # Devices are resolved via the FULL topic path, not a bare device_id
+    # lookup — mqtt_identifier is only unique *within* a location, so two
+    # different customers can legitimately both have a device called "01".
+    # See mqtt/provisioning.py for the full rationale.
     # ========================================================================
 
-    device = get_device(device_id)
+    device = resolve_device(
+        country_code=country_code,
+        client_key=client_key,
+        installation_key=installation_key,
+        device_id=device_id,
+    )
 
     if device is None:
         return None
 
     logger.info(
         "MQTT Edge resolved: "
-        "mqtt_identifier=%s device=%s",
+        "country=%s client=%s installation=%s mqtt_identifier=%s device=%s",
+        country_code,
+        client_key,
+        installation_key,
         device_id,
         device,
     )

@@ -8,7 +8,12 @@ class CountryAdmin(admin.ModelAdmin):
     list_display = (
         "name",
         "code",
+        "pending_review",
         "created_at",
+    )
+
+    list_filter = (
+        "pending_review",
     )
 
     search_fields = (

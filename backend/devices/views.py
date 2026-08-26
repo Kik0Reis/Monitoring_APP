@@ -1,6 +1,8 @@
 from django.db.models import Count
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters, viewsets
+from rest_framework.decorators import action
+from rest_framework.response import Response
 
 from .models import Device
 from .serializers import DeviceSerializer
@@ -28,6 +30,7 @@ class DeviceViewSet(viewsets.ModelViewSet):
         "location",
         "status",
         "active",
+        "pending_review",
     ]
 
     search_fields = [
@@ -45,3 +48,17 @@ class DeviceViewSet(viewsets.ModelViewSet):
     ordering = [
         "name",
     ]
+
+    @action(detail=True, methods=["post"])
+    def approve(self, request, pk=None):
+        """
+        Clear pending_review on a device that was auto-created from an
+        MQTT topic, confirming a human has looked at it (typically after
+        also giving it a real name and serial number).
+        """
+
+        device = self.get_object()
+        device.pending_review = False
+        device.save(update_fields=["pending_review", "updated_at"])
+
+        return Response(self.get_serializer(device).data)

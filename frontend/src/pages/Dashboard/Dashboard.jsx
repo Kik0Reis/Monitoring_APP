@@ -97,7 +97,7 @@ function Dashboard() {
   }
 
   const summary = dashboard?.summary ?? {};
-  const recentAlerts = dashboard?.recent_alerts ?? [];
+  const recentProblems = dashboard?.recent_problems ?? [];
   const devicesWithProblems = dashboard?.devices_with_problems ?? [];
   const locationsWithProblems = dashboard?.locations_with_problems ?? [];
 
@@ -135,7 +135,7 @@ function Dashboard() {
           <div className="panel-header">
             <div>
               <p className="panel-eyebrow">Monitoring</p>
-              <h2>Recent Alerts</h2>
+              <h2>Recent Problems</h2>
             </div>
             <button type="button" className="text-button" onClick={() => navigate("/alerts")}>
               See All
@@ -143,10 +143,10 @@ function Dashboard() {
           </div>
 
           <div className="alert-list">
-            {recentAlerts.length === 0 ? (
-              <div className="dashboard-empty">No active alerts.</div>
+            {recentProblems.length === 0 ? (
+              <div className="dashboard-empty">No active problems.</div>
             ) : (
-              recentAlerts.map((alert) => (
+              recentProblems.map((alert) => (
                 <button
                   type="button"
                   className="alert-row"

@@ -1,0 +1,154 @@
+"""
+Auto-provisioning of the Country -> Customer -> Location -> Device tree
+from MQTT topics.
+
+Devices are resolved using the FULL path extracted from the topic
+(country / client / installation / device_id), never a bare device_id
+lookup. This matters because mqtt_identifier is only guaranteed unique
+*within a location* — two different customers can legitimately both
+have a device whose installer called it "01".
+
+Anything created here is a guess based on untrusted network input
+(anyone who can publish to the MQTT broker can trigger this), so every
+newly created record is marked pending_review=True. It behaves exactly
+like a normal record everywhere else in the app — pending_review is
+purely a UI flag so a human can confirm it, rename it to something
+meaningful, and (for devices) fill in its real serial number.
+"""
+
+import logging
+
+from countries.models import Country
+from customers.models import Customer
+from devices.models import Device, DeviceType
+from locations.models import Location
+
+logger = logging.getLogger(__name__)
+
+
+def resolve_device(
+    *,
+    country_code: str,
+    client_key: str,
+    installation_key: str,
+    device_id: str,
+) -> Device | None:
+    """
+    Resolve the Device for an incoming MQTT message, auto-creating any
+    missing Country/Customer/Location/Device along the way.
+
+    Returns None (and logs a warning, mirroring the old "unknown device"
+    behavior) if the device already exists but has been deliberately
+    deactivated — a disabled device should not have messages processed
+    for it, and should not be silently "resurrected" by MQTT traffic.
+    """
+
+    country = _resolve_country(country_code)
+    customer = _resolve_customer(country, client_key)
+    location = _resolve_location(customer, installation_key)
+    device = _resolve_device(location, device_id)
+
+    if not device.active:
+        logger.warning(
+            "Ignoring MQTT message for deactivated device: "
+            "country=%s client=%s installation=%s device_id=%s",
+            country_code,
+            client_key,
+            installation_key,
+            device_id,
+        )
+        return None
+
+    return device
+
+
+def _resolve_country(country_code: str) -> Country:
+    code = country_code.strip().upper()[:2]
+
+    country, created = Country.objects.get_or_create(
+        code=code,
+        defaults={
+            "name": f"Unverified ({code})",
+            "pending_review": True,
+        },
+    )
+
+    if created:
+        logger.warning(
+            "Auto-created Country from MQTT: code=%s (pending review)",
+            code,
+        )
+
+    return country
+
+
+def _resolve_customer(country: Country, client_key: str) -> Customer:
+    key = client_key.strip()
+
+    customer, created = Customer.objects.get_or_create(
+        country=country,
+        mqtt_key=key,
+        defaults={
+            "name": key,
+            "pending_review": True,
+        },
+    )
+
+    if created:
+        logger.warning(
+            "Auto-created Customer from MQTT: country=%s key=%s (pending review)",
+            country.code,
+            key,
+        )
+
+    return customer
+
+
+def _resolve_location(customer: Customer, installation_key: str) -> Location:
+    key = installation_key.strip()
+
+    location, created = Location.objects.get_or_create(
+        customer=customer,
+        mqtt_key=key,
+        defaults={
+            "name": key,
+            "pending_review": True,
+        },
+    )
+
+    if created:
+        logger.warning(
+            "Auto-created Location from MQTT: customer=%s key=%s (pending review)",
+            customer.name,
+            key,
+        )
+
+    return location
+
+
+def _resolve_device(location: Location, device_id: str) -> Device:
+    identifier = device_id.strip()
+
+    device, created = Device.objects.get_or_create(
+        location=location,
+        mqtt_identifier=identifier,
+        defaults={
+            "name": identifier,
+            # No serial number is available from MQTT. This placeholder
+            # is guaranteed unique (location.id is globally unique) and
+            # obviously a placeholder, so it's easy to spot in the UI and
+            # replace with the device's real serial number later.
+            "serial_number": f"AUTO-{location.id}-{identifier}",
+            "device_type": DeviceType.EDGE,
+            "pending_review": True,
+        },
+    )
+
+    if created:
+        logger.warning(
+            "Auto-created Device from MQTT: location=%s identifier=%s (pending review)",
+            location.name,
+            identifier,
+        )
+
+    return device
