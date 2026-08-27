@@ -11,6 +11,7 @@ import DataTable from "../../components/common/DataTable";
 import Pagination from "../../components/common/Pagination";
 import FormField from "../../components/common/FormField";
 import StatusBadge from "../../components/common/StatusBadge";
+import PendingReviewBadge from "../../components/common/PendingReviewBadge";
 import CrudModal from "../../components/crud/CrudModal";
 
 import "./Cameras.css";
@@ -61,6 +62,15 @@ function Cameras() {
 
   const { lastUpdated, refreshing, refresh } = useAutoRefresh(resource.reload);
 
+  async function handleApprove(camera) {
+    try {
+      await camerasApi.approve(camera.id);
+      await resource.reload();
+    } catch (err) {
+      resource.setError(err.message);
+    }
+  }
+
   const formFields = useMemo(
     () => [
       { name: "name", label: "Name", type: "text", placeholder: "Office Camera 1" },
@@ -84,6 +94,7 @@ function Cameras() {
       render: (row) => (
         <span className="entity-name">
           {row.name}
+          {row.pending_review && <PendingReviewBadge />}
           <span className="entity-subtext">{row.device_name}</span>
         </span>
       ),
@@ -159,6 +170,16 @@ function Cameras() {
         onRowClick={(camera) => navigate(`/cameras/${camera.id}`)}
         actions={(camera) => (
           <>
+            {camera.pending_review && (
+              <button
+                className="icon-button"
+                aria-label={`Approve ${camera.name}`}
+                title="Approve"
+                onClick={() => handleApprove(camera)}
+              >
+                ✓
+              </button>
+            )}
             <button
               className="icon-button"
               aria-label={`View ${camera.name}`}

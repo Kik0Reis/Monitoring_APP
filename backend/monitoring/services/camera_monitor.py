@@ -11,6 +11,8 @@ from monitoring.models import (
     CameraAlertType,
 )
 
+from mqtt.provisioning import resolve_camera
+
 
 # ============================================================================
 # Camera status
@@ -179,7 +181,18 @@ def process_camera_status_list(
         )
 
         if not matching_cameras:
-            continue
+
+            # This device has never reported this camera_id before —
+            # auto-create it (channel defaults to 1: this payload shape
+            # doesn't carry channel information) instead of silently
+            # dropping the status update.
+            new_camera = resolve_camera(
+                device=device,
+                camera_identifier=camera_identifier,
+                name=camera_data.get("name"),
+            )
+
+            matching_cameras = [new_camera]
 
         for camera in matching_cameras:
 

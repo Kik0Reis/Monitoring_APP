@@ -261,6 +261,8 @@ export const camerasApi = {
       method: "DELETE",
     });
   },
+
+  approve: makeApprove("cameras"),
 };
 
 // Device/camera health & connectivity problems (offline, unhealthy

@@ -170,7 +170,12 @@ function DeviceDetail() {
     {
       key: "name",
       header: "Name",
-      render: (row) => <span className="entity-name">{row.name}</span>,
+      render: (row) => (
+        <span className="entity-name">
+          {row.name}
+          {row.pending_review && <PendingReviewBadge />}
+        </span>
+      ),
     },
     { key: "channel", header: "Ch." },
     {
@@ -184,6 +189,11 @@ function DeviceDetail() {
       render: (row) => formatTimestamp(row.last_seen),
     },
   ];
+
+  async function handleApproveCamera(item) {
+    await camerasApi.approve(item.id);
+    await cameras.reload();
+  }
 
   const componentEntries =
     device?.component_statuses && typeof device.component_statuses === "object"
@@ -324,6 +334,15 @@ function DeviceDetail() {
           onRowClick={(camera) => navigate(`/cameras/${camera.id}`)}
           actions={(camera) => (
             <>
+              {camera.pending_review && (
+                <button
+                  className="icon-button"
+                  title="Approve"
+                  onClick={() => handleApproveCamera(camera)}
+                >
+                  ✓
+                </button>
+              )}
               <button className="icon-button" onClick={() => cameras.openEdit(camera)}>
                 ✎
               </button>

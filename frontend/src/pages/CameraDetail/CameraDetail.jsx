@@ -9,6 +9,7 @@ import PageHeader from "../../components/common/PageHeader";
 import Breadcrumbs from "../../components/common/Breadcrumbs";
 import FormField from "../../components/common/FormField";
 import StatusBadge from "../../components/common/StatusBadge";
+import PendingReviewBadge from "../../components/common/PendingReviewBadge";
 import CrudModal from "../../components/crud/CrudModal";
 
 function formatTimestamp(value) {
@@ -101,9 +102,26 @@ function CameraDetail() {
         onRefresh={refresh}
       >
         {camera && (
-          <button className="secondary-button" onClick={openEdit}>
-            Edit Camera
-          </button>
+          <>
+            {camera.pending_review && (
+              <button
+                className="secondary-button"
+                onClick={async () => {
+                  try {
+                    await camerasApi.approve(camera.id);
+                    await loadCamera();
+                  } catch {
+                    // Best-effort; the badge just stays visible if this fails.
+                  }
+                }}
+              >
+                Approve
+              </button>
+            )}
+            <button className="secondary-button" onClick={openEdit}>
+              Edit Camera
+            </button>
+          </>
         )}
       </PageHeader>
 
@@ -114,6 +132,7 @@ function CameraDetail() {
               <div className="detail-summary-title">
                 <h2>{camera.name}</h2>
                 <StatusBadge status={camera.status} />
+                {camera.pending_review && <PendingReviewBadge />}
               </div>
 
               <div className="detail-summary-meta">

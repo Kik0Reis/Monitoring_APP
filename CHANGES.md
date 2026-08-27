@@ -159,3 +159,35 @@ segments should follow one agreed slug format, (3) device IDs should be
 meaningful on their own (e.g. the device's real serial number), not a
 bare number that only makes sense within one installation.
 
+## Follow-up pass: auto-create cameras from MQTT too
+
+Extended the same auto-provisioning approach to cameras. The
+`.../cameras` topic (device's camera status list — the one with
+`camera_id`, `name`, and an explicit `status`) is the one that drives
+real Camera rows; the per-component `status/detectorapi`,
+`status/idmr`, `status/detector` payloads use a different identifier
+format (`camera_id_ch1`) and remain purely informational, stored in the
+device's component health board as before — they don't create/update
+individual Camera rows.
+
+- `Camera` gained the same `pending_review` flag as the other four
+  entities, plus a `POST /api/cameras/<id>/approve/` action and
+  `?pending_review=true` filtering.
+- `monitoring/services/camera_monitor.py::process_camera_status_list`
+  now auto-creates a camera (via the new `resolve_camera()` in
+  `mqtt/provisioning.py`) instead of silently skipping when a device
+  reports a camera_id it hasn't seen before. New cameras default to
+  channel 1 (this payload doesn't carry channel info) and take their
+  name straight from the payload's `name` field.
+- No uniqueness-scoping fix was needed here the way there was for
+  devices — `Camera.camera_identifier` was already scoped per-device,
+  not global, so two different devices reporting the same camera_id
+  never collided in the first place.
+- Tested end-to-end with the exact real payload provided: one
+  `.../cameras` message auto-created the customer, location, device,
+  *and* both cameras in a single pass, all correctly flagged
+  `pending_review` and linked to the right parent at every level.
+- Frontend: the same "Pending Review" badge + Approve action now also
+  appears on the Cameras list page, the camera table inside a device's
+  detail page, and the camera detail page itself.
+

@@ -18,6 +18,7 @@ meaningful, and (for devices) fill in its real serial number.
 
 import logging
 
+from cameras.models import Camera
 from countries.models import Country
 from customers.models import Customer
 from devices.models import Device, DeviceType
@@ -152,3 +153,41 @@ def _resolve_device(location: Location, device_id: str) -> Device:
         )
 
     return device
+
+
+def resolve_camera(
+    device: Device,
+    camera_identifier: str,
+    name: str | None = None,
+    channel: int = 1,
+) -> Camera:
+    """
+    Resolve the Camera for an entry in a device's ".../cameras" status
+    list, auto-creating it if this device hasn't reported this camera
+    before.
+
+    Scoped to `device` (Camera.camera_identifier is already only unique
+    per-device in the schema, so no collision risk here the way there was
+    with Device.mqtt_identifier).
+    """
+
+    identifier = camera_identifier.strip()
+
+    camera, created = Camera.objects.get_or_create(
+        device=device,
+        camera_identifier=identifier,
+        channel=channel,
+        defaults={
+            "name": (name or identifier).strip() or identifier,
+            "pending_review": True,
+        },
+    )
+
+    if created:
+        logger.warning(
+            "Auto-created Camera from MQTT: device=%s identifier=%s (pending review)",
+            device.name,
+            identifier,
+        )
+
+    return camera

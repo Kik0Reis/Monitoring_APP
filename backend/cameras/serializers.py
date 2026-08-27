@@ -38,6 +38,7 @@ class CameraSerializer(serializers.ModelSerializer):
             "last_seen",
             "active",
             "breadcrumb",
+            "pending_review",
             "created_at",
             "updated_at",
         )
@@ -48,6 +49,7 @@ class CameraSerializer(serializers.ModelSerializer):
             "device_name",
             "status",
             "last_seen",
+            "pending_review",
             "created_at",
             "updated_at",
         )

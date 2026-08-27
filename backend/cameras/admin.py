@@ -13,12 +13,14 @@ class CameraAdmin(admin.ModelAdmin):
         "status",
         "last_seen",
         "active",
+        "pending_review",
         "created_at",
     )
 
     list_filter = (
         "status",
         "active",
+        "pending_review",
         "channel",
         "device",
     )

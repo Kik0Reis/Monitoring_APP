@@ -51,6 +51,14 @@ class Camera(TimeStampedModel):
         default=True,
     )
 
+    # True for cameras auto-created from an MQTT topic (the device's
+    # ".../cameras" status list) that didn't match any existing camera.
+    # Fully functional either way — this is just a UI flag so a human can
+    # confirm it / give it a nicer name.
+    pending_review = models.BooleanField(
+        default=False,
+    )
+
     class Meta:
         ordering = ["name"]
         verbose_name = "Camera"
