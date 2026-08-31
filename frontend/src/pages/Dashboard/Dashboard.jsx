@@ -198,8 +198,9 @@ function Dashboard() {
                   <div className="installation-name">
                     <StatusDot status={device.status} />
                     <div>
-                      <strong>{device.name}</strong>
-                      <span>{device.location_name ?? "—"}</span>
+                      <strong>
+                        {device.name} - {device.location_name ?? "—"}
+                      </strong>
                     </div>
                   </div>
 
