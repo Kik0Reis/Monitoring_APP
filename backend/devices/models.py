@@ -95,7 +95,6 @@ class Device(TimeStampedModel):
         blank=True,
     )
 
-
     health_data = models.JSONField(
         default=dict,
         blank=True,

@@ -64,8 +64,6 @@ class DeviceHeartbeatAdmin(admin.ModelAdmin):
         "temperature",
     )
 
-    list_filter = (
-        "device",
-    )
+    list_filter = ("device",)
 
     ordering = ("-received_at",)

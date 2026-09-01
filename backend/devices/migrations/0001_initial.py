@@ -9,29 +9,68 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ('locations', '0001_initial'),
+        ("locations", "0001_initial"),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='Device',
+            name="Device",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('updated_at', models.DateTimeField(auto_now=True)),
-                ('name', models.CharField(max_length=150)),
-                ('mqtt_identifier', models.CharField(db_index=True, max_length=150, unique=True)),
-                ('serial_number', models.CharField(db_index=True, max_length=100, unique=True)),
-                ('status', models.CharField(choices=[('ONLINE', 'Online'), ('OFFLINE', 'Offline'), ('UNKNOWN', 'Unknown')], default='UNKNOWN', max_length=10)),
-                ('last_seen', models.DateTimeField(blank=True, null=True)),
-                ('device_type', models.CharField(choices=[('CAMERA', 'Camera'), ('EDGE', 'Edge Device')], default='CAMERA', max_length=20)),
-                ('active', models.BooleanField(default=True)),
-                ('location', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='devices', to='locations.location')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
+                ("name", models.CharField(max_length=150)),
+                (
+                    "mqtt_identifier",
+                    models.CharField(db_index=True, max_length=150, unique=True),
+                ),
+                (
+                    "serial_number",
+                    models.CharField(db_index=True, max_length=100, unique=True),
+                ),
+                (
+                    "status",
+                    models.CharField(
+                        choices=[
+                            ("ONLINE", "Online"),
+                            ("OFFLINE", "Offline"),
+                            ("UNKNOWN", "Unknown"),
+                        ],
+                        default="UNKNOWN",
+                        max_length=10,
+                    ),
+                ),
+                ("last_seen", models.DateTimeField(blank=True, null=True)),
+                (
+                    "device_type",
+                    models.CharField(
+                        choices=[("CAMERA", "Camera"), ("EDGE", "Edge Device")],
+                        default="CAMERA",
+                        max_length=20,
+                    ),
+                ),
+                ("active", models.BooleanField(default=True)),
+                (
+                    "location",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="devices",
+                        to="locations.location",
+                    ),
+                ),
             ],
             options={
-                'verbose_name': 'Device',
-                'verbose_name_plural': 'Devices',
-                'ordering': ['name'],
+                "verbose_name": "Device",
+                "verbose_name_plural": "Devices",
+                "ordering": ["name"],
             },
         ),
     ]

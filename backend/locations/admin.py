@@ -19,10 +19,6 @@ class LocationAdmin(admin.ModelAdmin):
         "pending_review",
     )
 
-    search_fields = (
-        "name",
-    )
+    search_fields = ("name",)
 
-    ordering = (
-        "name",
-    )
+    ordering = ("name",)

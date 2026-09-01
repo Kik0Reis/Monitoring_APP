@@ -12,15 +12,11 @@ class CountryAdmin(admin.ModelAdmin):
         "created_at",
     )
 
-    list_filter = (
-        "pending_review",
-    )
+    list_filter = ("pending_review",)
 
     search_fields = (
         "name",
         "code",
     )
 
-    ordering = (
-        "name",
-    )
+    ordering = ("name",)

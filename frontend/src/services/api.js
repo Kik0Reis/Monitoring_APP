@@ -1,4 +1,8 @@
-const API_BASE_URL = "http://localhost:8000/api";
+// Hardcoding this would break the app for anyone who isn't running the
+// backend on localhost:8000 (staging, production, another dev's machine
+// with a different port). VITE_API_BASE_URL lets that be configured per
+// environment; it defaults to the local dev backend when unset.
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api";
 
 async function apiRequest(endpoint, options = {}) {
   const response = await fetch(`${API_BASE_URL}${endpoint}`, {

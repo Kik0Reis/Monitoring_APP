@@ -6,23 +6,27 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('customers', '0003_customer_mqtt_key_customer_pending_review_and_more'),
-        ('locations', '0002_location_unique_location_name_per_customer'),
+        ("customers", "0003_customer_mqtt_key_customer_pending_review_and_more"),
+        ("locations", "0002_location_unique_location_name_per_customer"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='location',
-            name='mqtt_key',
+            model_name="location",
+            name="mqtt_key",
             field=models.CharField(blank=True, max_length=150, null=True),
         ),
         migrations.AddField(
-            model_name='location',
-            name='pending_review',
+            model_name="location",
+            name="pending_review",
             field=models.BooleanField(default=False),
         ),
         migrations.AddConstraint(
-            model_name='location',
-            constraint=models.UniqueConstraint(condition=models.Q(('mqtt_key__isnull', False)), fields=('customer', 'mqtt_key'), name='unique_location_mqtt_key_per_customer'),
+            model_name="location",
+            constraint=models.UniqueConstraint(
+                condition=models.Q(("mqtt_key__isnull", False)),
+                fields=("customer", "mqtt_key"),
+                name="unique_location_mqtt_key_per_customer",
+            ),
         ),
     ]

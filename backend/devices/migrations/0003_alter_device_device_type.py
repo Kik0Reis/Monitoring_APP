@@ -6,13 +6,18 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('devices', '0002_device_unique_device_name_per_location'),
+        ("devices", "0002_device_unique_device_name_per_location"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='device',
-            name='device_type',
-            field=models.CharField(choices=[('EDGE', 'Edge Device')], default='EDGE', editable=False, max_length=20),
+            model_name="device",
+            name="device_type",
+            field=models.CharField(
+                choices=[("EDGE", "Edge Device")],
+                default="EDGE",
+                editable=False,
+                max_length=20,
+            ),
         ),
     ]

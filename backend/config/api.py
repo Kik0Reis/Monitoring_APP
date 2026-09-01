@@ -1,11 +1,11 @@
 from rest_framework.routers import DefaultRouter, path
 
-from monitoring.views import DashboardView, DetectionsView, ProblemsView
+from cameras.views import CameraViewSet
 from countries.views import CountryViewSet
 from customers.views import CustomerViewSet
-from locations.views import LocationViewSet
 from devices.views import DeviceViewSet
-from cameras.views import CameraViewSet
+from locations.views import LocationViewSet
+from monitoring.views import DashboardView, DetectionsView, ProblemsView
 
 router = DefaultRouter()
 
@@ -20,13 +20,11 @@ router.register("cameras", CameraViewSet)
 
 urlpatterns = [
     *router.urls,
-
     path(
         "dashboard/",
         DashboardView.as_view(),
         name="dashboard",
     ),
-
     # Device/camera health & connectivity problems (offline, unhealthy
     # component, MQTT/system errors, camera errors).
     path(
@@ -34,7 +32,6 @@ urlpatterns = [
         ProblemsView.as_view(),
         name="problems",
     ),
-
     # Real camera detections reported over MQTT (smoke, person, etc.).
     path(
         "detections/",

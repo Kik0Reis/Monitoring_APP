@@ -6,23 +6,26 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('devices', '0004_device_component_statuses_device_health_data'),
-        ('locations', '0003_location_mqtt_key_location_pending_review_and_more'),
+        ("devices", "0004_device_component_statuses_device_health_data"),
+        ("locations", "0003_location_mqtt_key_location_pending_review_and_more"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='device',
-            name='pending_review',
+            model_name="device",
+            name="pending_review",
             field=models.BooleanField(default=False),
         ),
         migrations.AlterField(
-            model_name='device',
-            name='mqtt_identifier',
+            model_name="device",
+            name="mqtt_identifier",
             field=models.CharField(db_index=True, max_length=150),
         ),
         migrations.AddConstraint(
-            model_name='device',
-            constraint=models.UniqueConstraint(fields=('location', 'mqtt_identifier'), name='unique_device_mqtt_identifier_per_location'),
+            model_name="device",
+            constraint=models.UniqueConstraint(
+                fields=("location", "mqtt_identifier"),
+                name="unique_device_mqtt_identifier_per_location",
+            ),
         ),
     ]

@@ -4,19 +4,12 @@ from django.db import transaction
 from django.utils import timezone
 
 from cameras.models import Camera, CameraStatus
-
 from monitoring.models import (
     AlertSeverity,
     CameraAlert,
     CameraAlertType,
 )
-
 from mqtt.provisioning import resolve_camera
-
-
-# ============================================================================
-# Camera status
-# ============================================================================
 
 
 @transaction.atomic
@@ -30,9 +23,7 @@ def update_camera_status(
         received_at = timezone.now()
 
     if new_status not in CameraStatus.values:
-        raise ValueError(
-            f"Invalid camera status: {new_status}"
-        )
+        raise ValueError(f"Invalid camera status: {new_status}")
 
     camera.status = new_status
 
@@ -49,11 +40,6 @@ def update_camera_status(
     )
 
     return camera
-
-
-# ============================================================================
-# Camera lookup
-# ============================================================================
 
 
 def get_camera(
@@ -86,11 +72,6 @@ def get_cameras_by_identifier(
             active=True,
         )
     )
-
-
-# ============================================================================
-# Camera list/status message
-# ============================================================================
 
 
 @transaction.atomic
@@ -144,9 +125,7 @@ def process_camera_status_list(
         if not isinstance(camera_data, dict):
             continue
 
-        camera_identifier = camera_data.get(
-            "camera_id"
-        )
+        camera_identifier = camera_data.get("camera_id")
 
         if not camera_identifier:
             continue
@@ -207,11 +186,6 @@ def process_camera_status_list(
     return processed
 
 
-# ============================================================================
-# Camera alerts
-# ============================================================================
-
-
 def create_camera_alert(
     camera: Camera,
     alert_type: str,
@@ -236,11 +210,6 @@ def create_camera_alert(
         message=message,
         raw_payload=payload,
     )
-
-
-# ============================================================================
-# Camera alert
-# ============================================================================
 
 
 @transaction.atomic
@@ -274,15 +243,11 @@ def process_camera_alert(
     )
 
     message = (
-        f"Camera '{camera.name}' detected "
-        f"'{class_label}' "
-        f"(action={action_code}"
+        f"Camera '{camera.name}' detected " f"'{class_label}' " f"(action={action_code}"
     )
 
     if confidence is not None:
-        message += (
-            f", confidence={confidence}"
-        )
+        message += f", confidence={confidence}"
 
     message += ")."
 
@@ -293,11 +258,6 @@ def process_camera_alert(
         payload=payload,
         severity=AlertSeverity.WARNING,
     )
-
-
-# ============================================================================
-# Camera event
-# ============================================================================
 
 
 @transaction.atomic
@@ -318,11 +278,6 @@ def process_camera_event(
     )
 
     return None
-
-
-# ============================================================================
-# Camera error
-# ============================================================================
 
 
 @transaction.atomic
@@ -352,10 +307,7 @@ def process_camera_error(
     return create_camera_alert(
         camera=camera,
         alert_type=CameraAlertType.CAMERA_ERROR,
-        message=(
-            f"Camera '{camera.name}' reported an error: "
-            f"{error_message}"
-        ),
+        message=(f"Camera '{camera.name}' reported an error: " f"{error_message}"),
         payload=payload,
         severity=AlertSeverity.WARNING,
     )

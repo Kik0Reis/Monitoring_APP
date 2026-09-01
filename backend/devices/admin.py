@@ -30,6 +30,4 @@ class DeviceAdmin(admin.ModelAdmin):
         "mqtt_identifier",
     )
 
-    ordering = (
-        "name",
-    )
+    ordering = ("name",)

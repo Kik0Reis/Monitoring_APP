@@ -32,6 +32,4 @@ class CameraAdmin(admin.ModelAdmin):
         "device__mqtt_identifier",
     )
 
-    ordering = (
-        "name",
-    )
+    ordering = ("name",)

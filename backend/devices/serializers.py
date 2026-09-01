@@ -162,11 +162,7 @@ class DeviceSerializer(serializers.ModelSerializer):
 
         if location and not location.active:
             raise serializers.ValidationError(
-                {
-                    "location_id": (
-                        "Cannot assign a device to an inactive location."
-                    )
-                }
+                {"location_id": ("Cannot assign a device to an inactive location.")}
             )
 
         return attrs

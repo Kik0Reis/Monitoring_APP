@@ -83,7 +83,4 @@ class Camera(TimeStampedModel):
         ]
 
     def __str__(self):
-        return (
-            f"{self.name} "
-            f"({self.camera_identifier}/ch{self.channel})"
-        )
+        return f"{self.name} " f"({self.camera_identifier}/ch{self.channel})"

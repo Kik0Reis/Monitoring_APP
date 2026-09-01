@@ -4,6 +4,7 @@ from devices.models import Device
 
 from .models import Camera
 
+
 class CameraSerializer(serializers.ModelSerializer):
     device_name = serializers.CharField(
         source="device.name",
@@ -129,21 +130,12 @@ class CameraSerializer(serializers.ModelSerializer):
 
         if not device.active:
             raise serializers.ValidationError(
-                {
-                    "device_id": (
-                        "Cannot assign a camera to an inactive device."
-                    )
-                }
+                {"device_id": ("Cannot assign a camera to an inactive device.")}
             )
 
         if device.device_type != "EDGE":
             raise serializers.ValidationError(
-                {
-                    "device_id": (
-                        "A camera can only be connected to "
-                        "an Edge device."
-                    )
-                }
+                {"device_id": ("A camera can only be connected to " "an Edge device.")}
             )
 
-        return attrs 
+        return attrs

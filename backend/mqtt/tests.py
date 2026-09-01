@@ -1,12 +1,12 @@
-from devices.models import Device, DeviceStatus, DeviceType
+from django.test import TestCase
+
+from cameras.models import Camera, CameraStatus
 from countries.models import Country
 from customers.models import Customer
+from devices.models import Device, DeviceStatus, DeviceType
 from locations.models import Location
-from django.test import TestCase
-from monitoring.models import DeviceAlert, AlertType
-
+from monitoring.models import AlertType, CameraAlert, CameraAlertType, DeviceAlert
 from mqtt.service import process_mqtt_message
-
 
 
 class MQTTServiceTests(TestCase):
@@ -49,9 +49,7 @@ class MQTTServiceTests(TestCase):
             status=DeviceStatus.UNKNOWN,
         )
 
-    # ========================================================================
     # Status message
-    # ========================================================================
 
     def test_online_status_message_updates_device(self):
         """
@@ -93,9 +91,7 @@ class MQTTServiceTests(TestCase):
             self.device.last_seen,
         )
 
-    # ========================================================================
     # Health message
-    # ========================================================================
 
     def test_health_message_updates_device(self):
         """
@@ -104,14 +100,7 @@ class MQTTServiceTests(TestCase):
         aiaction/pt/aitecserv/office2/edge-01/health
         """
 
-        topic = (
-            "aiaction/"
-            "pt/"
-            "aitecserv/"
-            "office2/"
-            "edge-01/"
-            "health"
-        )
+        topic = "aiaction/" "pt/" "aitecserv/" "office2/" "edge-01/" "health"
 
         payload = {
             "timestamp": "2026-07-15T14:30:00Z",
@@ -151,9 +140,7 @@ class MQTTServiceTests(TestCase):
             self.device.last_seen,
         )
 
-    # ========================================================================
     # Unhealthy component
-    # ========================================================================
 
     def test_health_message_creates_alert_for_unhealthy_component(self):
         """
@@ -162,14 +149,7 @@ class MQTTServiceTests(TestCase):
         The device itself remains ONLINE.
         """
 
-        topic = (
-            "aiaction/"
-            "pt/"
-            "aitecserv/"
-            "office2/"
-            "edge-01/"
-            "health"
-        )
+        topic = "aiaction/" "pt/" "aitecserv/" "office2/" "edge-01/" "health"
 
         payload = {
             "timestamp": "2026-07-15T14:30:00Z",
@@ -213,16 +193,17 @@ class MQTTServiceTests(TestCase):
             ).exists()
         )
 
-    # ========================================================================
     # Camera-level message
-    # ========================================================================
 
-    def test_camera_alert_topic_is_parsed_without_changing_device_status(self):
+    def test_camera_alert_for_unknown_camera_is_ignored(self):
         """
-        Camera-level messages are currently parsed and routed through
-        the MQTT service, but they are not persisted yet.
+        Unlike the ".../cameras" bulk status list, a single-camera alert
+        does NOT auto-create the camera if it doesn't exist yet — an
+        "alert" is a real-world detection, and we don't want to invent a
+        Camera record from one just to hang it off. The message should be
+        dropped (with a warning logged) and the Edge device left alone.
 
-        Example:
+        Example topic:
 
         aiaction/pt/aitecserv/office2/edge-01/
         AXIS-B8A44F957EC7/ch1/alert
@@ -261,8 +242,56 @@ class MQTTServiceTests(TestCase):
             payload=payload,
         )
 
-        self.assertEqual(
-            result,
-            self.device,
+        self.assertIsNone(result)
+
+        self.device.refresh_from_db()
+        self.assertEqual(self.device.status, DeviceStatus.UNKNOWN)
+
+    def test_camera_alert_for_known_camera_creates_alert(self):
+        """
+        Same topic as above, but this time the camera already exists —
+        the alert should be recorded and the camera marked ONLINE (it
+        clearly is, since it just sent us a detection).
+        """
+
+        camera = Camera.objects.create(
+            device=self.device,
+            camera_identifier="AXIS-B8A44F957EC7",
+            channel=1,
+            name="Front door",
+            status=CameraStatus.UNKNOWN,
         )
 
+        topic = (
+            "aiaction/"
+            "pt/"
+            "aitecserv/"
+            "office2/"
+            "edge-01/"
+            "AXIS-B8A44F957EC7/"
+            "ch1/"
+            "alert"
+        )
+
+        payload = {
+            "action_code": "HighProbFireDetected",
+            "class_label": "smoke",
+            "confidence": 0.8741,
+            "timestamp": "2026-07-15T14:35:00Z",
+            "source": "aiaction",
+        }
+
+        result = process_mqtt_message(topic=topic, payload=payload)
+
+        self.assertEqual(result, camera)
+
+        camera.refresh_from_db()
+        self.assertEqual(camera.status, CameraStatus.ONLINE)
+
+        self.assertTrue(
+            CameraAlert.objects.filter(
+                camera=camera,
+                alert_type=CameraAlertType.CAMERA_ALERT,
+                active=True,
+            ).exists()
+        )

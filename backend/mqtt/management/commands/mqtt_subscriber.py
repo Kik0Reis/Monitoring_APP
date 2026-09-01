@@ -16,11 +16,7 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
 
-        self.stdout.write(
-            self.style.SUCCESS(
-                "Starting MQTT subscriber..."
-            )
-        )
+        self.stdout.write(self.style.SUCCESS("Starting MQTT subscriber..."))
 
         subscriber = MQTTSubscriber()
 
@@ -29,10 +25,6 @@ class Command(BaseCommand):
 
         except KeyboardInterrupt:
 
-            self.stdout.write(
-                self.style.WARNING(
-                    "Stopping MQTT subscriber..."
-                )
-            )
+            self.stdout.write(self.style.WARNING("Stopping MQTT subscriber..."))
 
             subscriber.stop()

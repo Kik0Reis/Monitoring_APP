@@ -2,10 +2,6 @@ from django.db import models
 
 from devices.models import Device, DeviceStatus
 
-# ============================================================================
-# Device Heartbeat
-# ============================================================================
-
 
 class DeviceHeartbeat(models.Model):
     """
@@ -85,11 +81,6 @@ class DeviceHeartbeat(models.Model):
         return f"{self.device.name} - {self.received_at}"
 
 
-# ============================================================================
-# Device Status History
-# ============================================================================
-
-
 class DeviceStatusHistory(models.Model):
     """
     Stores changes to a device's current status.
@@ -130,15 +121,7 @@ class DeviceStatusHistory(models.Model):
         verbose_name_plural = "Device Status Histories"
 
     def __str__(self):
-        return (
-            f"{self.device.name}: "
-            f"{self.old_status} -> {self.new_status}"
-        )
-
-
-# ============================================================================
-# Device Alert
-# ============================================================================
+        return f"{self.device.name}: " f"{self.old_status} -> {self.new_status}"
 
 
 class AlertSeverity(models.TextChoices):
@@ -225,11 +208,8 @@ class DeviceAlert(models.Model):
         verbose_name_plural = "Device Alerts"
 
     def __str__(self):
-        return (
-            f"{self.device.name} - "
-            f"{self.alert_type} - "
-            f"{self.severity}"
-        )
+        return f"{self.device.name} - " f"{self.alert_type} - " f"{self.severity}"
+
 
 class CameraAlertType(models.TextChoices):
     CAMERA_ALERT = "CAMERA_ALERT", "Camera Alert"
@@ -289,8 +269,4 @@ class CameraAlert(models.Model):
         verbose_name_plural = "Camera Alerts"
 
     def __str__(self):
-        return (
-            f"{self.camera.name} - "
-            f"{self.alert_type} - "
-            f"{self.severity}"
-        )
+        return f"{self.camera.name} - " f"{self.alert_type} - " f"{self.severity}"

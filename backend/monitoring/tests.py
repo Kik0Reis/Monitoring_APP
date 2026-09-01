@@ -12,15 +12,16 @@ They use Django's test database to verify that the monitoring service
 correctly updates Device, DeviceHeartbeat, and DeviceAlert records.
 """
 
-from django.test import TestCase
-from django.utils import timezone
 from datetime import timedelta
 
+from django.test import TestCase
+from django.utils import timezone
+
+from cameras.models import Camera, CameraStatus
 from countries.models import Country
 from customers.models import Customer
-from locations.models import Location
 from devices.models import Device, DeviceStatus, DeviceType
-
+from locations.models import Location
 from monitoring.models import (
     AlertSeverity,
     AlertType,
@@ -30,18 +31,12 @@ from monitoring.models import (
 from monitoring.services.device_health import (
     process_device_health,
 )
-
-
-from cameras.models import Camera, CameraStatus
 from monitoring.services.heartbeat_monitor import (
-    check_device_timeout,
-    check_camera_timeout,
     check_all_heartbeats,
+    check_camera_timeout,
+    check_device_timeout,
 )
 
-# ============================================================================
-# Camera heartbeat timeout tests
-# ============================================================================
 
 class CameraHeartbeatTimeoutTests(TestCase):
     """
@@ -96,9 +91,7 @@ class CameraHeartbeatTimeoutTests(TestCase):
             status=CameraStatus.ONLINE,
         )
 
-    # ========================================================================
     # Camera is still healthy
-    # ========================================================================
 
     def test_camera_remains_online_within_timeout(self):
         """
@@ -108,13 +101,9 @@ class CameraHeartbeatTimeoutTests(TestCase):
 
         now = timezone.now()
 
-        self.camera.last_seen = (
-            now - timedelta(seconds=30)
-        )
+        self.camera.last_seen = now - timedelta(seconds=30)
 
-        self.camera.save(
-            update_fields=["last_seen"]
-        )
+        self.camera.save(update_fields=["last_seen"])
 
         check_camera_timeout(
             camera=self.camera,
@@ -129,9 +118,7 @@ class CameraHeartbeatTimeoutTests(TestCase):
             CameraStatus.ONLINE,
         )
 
-    # ========================================================================
     # Camera becomes offline
-    # ========================================================================
 
     def test_camera_becomes_offline_after_timeout(self):
         """
@@ -140,13 +127,9 @@ class CameraHeartbeatTimeoutTests(TestCase):
 
         now = timezone.now()
 
-        self.camera.last_seen = (
-            now - timedelta(seconds=61)
-        )
+        self.camera.last_seen = now - timedelta(seconds=61)
 
-        self.camera.save(
-            update_fields=["last_seen"]
-        )
+        self.camera.save(update_fields=["last_seen"])
 
         check_camera_timeout(
             camera=self.camera,
@@ -161,9 +144,7 @@ class CameraHeartbeatTimeoutTests(TestCase):
             CameraStatus.OFFLINE,
         )
 
-    # ========================================================================
     # Never-seen camera
-    # ========================================================================
 
     def test_camera_without_last_seen_remains_unknown(self):
         """
@@ -192,9 +173,7 @@ class CameraHeartbeatTimeoutTests(TestCase):
             CameraStatus.UNKNOWN,
         )
 
-    # ========================================================================
     # Camera timeout does not change Edge status
-    # ========================================================================
 
     def test_camera_timeout_does_not_change_device_status(self):
         """
@@ -216,13 +195,9 @@ class CameraHeartbeatTimeoutTests(TestCase):
             ]
         )
 
-        self.camera.last_seen = (
-            now - timedelta(seconds=61)
-        )
+        self.camera.last_seen = now - timedelta(seconds=61)
 
-        self.camera.save(
-            update_fields=["last_seen"]
-        )
+        self.camera.save(update_fields=["last_seen"])
 
         check_camera_timeout(
             camera=self.camera,
@@ -243,9 +218,7 @@ class CameraHeartbeatTimeoutTests(TestCase):
             DeviceStatus.ONLINE,
         )
 
-    # ========================================================================
     # Combined heartbeat monitor
-    # ========================================================================
 
     def test_check_all_heartbeats_checks_devices_and_cameras(self):
         """
@@ -258,18 +231,12 @@ class CameraHeartbeatTimeoutTests(TestCase):
         # Edge device is healthy.
         self.device.last_seen = now
 
-        self.device.save(
-            update_fields=["last_seen"]
-        )
+        self.device.save(update_fields=["last_seen"])
 
         # Camera has timed out.
-        self.camera.last_seen = (
-            now - timedelta(seconds=61)
-        )
+        self.camera.last_seen = now - timedelta(seconds=61)
 
-        self.camera.save(
-            update_fields=["last_seen"]
-        )
+        self.camera.save(update_fields=["last_seen"])
 
         result = check_all_heartbeats(
             timeout_seconds=60,
@@ -302,6 +269,7 @@ class CameraHeartbeatTimeoutTests(TestCase):
             result["cameras_offline"],
             1,
         )
+
 
 class DeviceHealthServiceTests(TestCase):
     """
@@ -346,9 +314,7 @@ class DeviceHealthServiceTests(TestCase):
             status=DeviceStatus.UNKNOWN,
         )
 
-    # ========================================================================
     # Helper
-    # ========================================================================
 
     @staticmethod
     def healthy_payload():
@@ -378,9 +344,7 @@ class DeviceHealthServiceTests(TestCase):
             },
         }
 
-    # ========================================================================
     # Test 1
-    # ========================================================================
 
     def test_all_components_up_marks_device_online(self):
         """
@@ -435,9 +399,7 @@ class DeviceHealthServiceTests(TestCase):
             ).exists()
         )
 
-    # ========================================================================
     # Test 2
-    # ========================================================================
 
     def test_unhealthy_component_keeps_device_online_and_creates_alert(self):
         """
@@ -511,9 +473,7 @@ class DeviceHealthServiceTests(TestCase):
             payload,
         )
 
-    # ========================================================================
     # Test 3
-    # ========================================================================
 
     def test_component_recovery_resolves_health_alert(self):
         """
@@ -569,13 +529,9 @@ class DeviceHealthServiceTests(TestCase):
         # The previous alert should now be resolved.
         alert.refresh_from_db()
 
-        self.assertFalse(
-            alert.active
-        )
+        self.assertFalse(alert.active)
 
-        self.assertIsNotNone(
-            alert.resolved_at
-        )
+        self.assertIsNotNone(alert.resolved_at)
 
         # There should still only be one health alert.
         #
@@ -588,11 +544,6 @@ class DeviceHealthServiceTests(TestCase):
             ).count(),
             1,
         )
-
-
-# ============================================================================
-# Heartbeat timeout tests
-# ============================================================================
 
 
 class HeartbeatTimeoutTests(TestCase):
@@ -630,9 +581,7 @@ class HeartbeatTimeoutTests(TestCase):
             status=DeviceStatus.ONLINE,
         )
 
-    # ========================================================================
     # Device is still healthy
-    # ========================================================================
 
     def test_device_remains_online_within_timeout(self):
         """
@@ -640,21 +589,11 @@ class HeartbeatTimeoutTests(TestCase):
         inside the allowed timeout window.
         """
 
-        from datetime import timedelta
-
-        from monitoring.services.heartbeat_monitor import (
-            check_device_timeout,
-        )
-
         now = timezone.now()
 
-        self.device.last_seen = (
-            now - timedelta(seconds=30)
-        )
+        self.device.last_seen = now - timedelta(seconds=30)
 
-        self.device.save(
-            update_fields=["last_seen"]
-        )
+        self.device.save(update_fields=["last_seen"])
 
         check_device_timeout(
             device=self.device,
@@ -677,30 +616,18 @@ class HeartbeatTimeoutTests(TestCase):
             ).exists()
         )
 
-    # ========================================================================
     # Device becomes offline
-    # ========================================================================
 
     def test_device_becomes_offline_after_timeout(self):
         """
         A device becomes OFFLINE when its heartbeat has expired.
         """
 
-        from datetime import timedelta
-
-        from monitoring.services.heartbeat_monitor import (
-            check_device_timeout,
-        )
-
         now = timezone.now()
 
-        self.device.last_seen = (
-            now - timedelta(seconds=61)
-        )
+        self.device.last_seen = now - timedelta(seconds=61)
 
-        self.device.save(
-            update_fields=["last_seen"]
-        )
+        self.device.save(update_fields=["last_seen"])
 
         check_device_timeout(
             device=self.device,
@@ -733,9 +660,7 @@ class HeartbeatTimeoutTests(TestCase):
             alert.message.lower(),
         )
 
-    # ========================================================================
     # Offline alert is not duplicated
-    # ========================================================================
 
     def test_offline_alert_is_not_duplicated(self):
         """
@@ -743,21 +668,11 @@ class HeartbeatTimeoutTests(TestCase):
         offline alerts.
         """
 
-        from datetime import timedelta
-
-        from monitoring.services.heartbeat_monitor import (
-            check_device_timeout,
-        )
-
         now = timezone.now()
 
-        self.device.last_seen = (
-            now - timedelta(seconds=61)
-        )
+        self.device.last_seen = now - timedelta(seconds=61)
 
-        self.device.save(
-            update_fields=["last_seen"]
-        )
+        self.device.save(update_fields=["last_seen"])
 
         # First timeout check.
         check_device_timeout(
@@ -784,9 +699,7 @@ class HeartbeatTimeoutTests(TestCase):
             1,
         )
 
-    # ========================================================================
     # Never-seen device remains UNKNOWN
-    # ========================================================================
 
     def test_device_without_last_seen_remains_unknown(self):
         """
@@ -794,10 +707,6 @@ class HeartbeatTimeoutTests(TestCase):
 
         We don't have enough information to say that it is offline.
         """
-
-        from monitoring.services.heartbeat_monitor import (
-            check_device_timeout,
-        )
 
         self.device.status = DeviceStatus.UNKNOWN
         self.device.last_seen = None
@@ -828,4 +737,3 @@ class HeartbeatTimeoutTests(TestCase):
                 active=True,
             ).exists()
         )
-

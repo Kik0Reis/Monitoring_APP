@@ -13,21 +13,14 @@ from datetime import timedelta
 from django.db import transaction
 from django.utils import timezone
 
-from devices.models import Device, DeviceStatus
 from cameras.models import Camera, CameraStatus
-
+from devices.models import Device, DeviceStatus
 from monitoring.services.device_health import (
     create_offline_alert,
     update_device_status,
 )
 
-
 DEFAULT_HEARTBEAT_TIMEOUT_SECONDS = 60
-
-
-# ============================================================================
-# Device heartbeat
-# ============================================================================
 
 
 @transaction.atomic
@@ -43,10 +36,7 @@ def check_device_timeout(
     if device.last_seen is None:
         return device
 
-    expires_at = (
-        device.last_seen
-        + timedelta(seconds=timeout_seconds)
-    )
+    expires_at = device.last_seen + timedelta(seconds=timeout_seconds)
 
     if now <= expires_at:
         return device
@@ -63,11 +53,6 @@ def check_device_timeout(
     return device
 
 
-# ============================================================================
-# Camera heartbeat
-# ============================================================================
-
-
 @transaction.atomic
 def check_camera_timeout(
     camera: Camera,
@@ -81,10 +66,7 @@ def check_camera_timeout(
     if camera.last_seen is None:
         return camera
 
-    expires_at = (
-        camera.last_seen
-        + timedelta(seconds=timeout_seconds)
-    )
+    expires_at = camera.last_seen + timedelta(seconds=timeout_seconds)
 
     if now <= expires_at:
         return camera
@@ -103,11 +85,6 @@ def check_camera_timeout(
     return camera
 
 
-# ============================================================================
-# All devices
-# ============================================================================
-
-
 def check_all_device_timeouts(
     timeout_seconds: int = DEFAULT_HEARTBEAT_TIMEOUT_SECONDS,
     now=None,
@@ -118,8 +95,11 @@ def check_all_device_timeouts(
 
     offline_count = 0
 
-    devices = Device.objects.filter(
-        active=True,
+    # Only the columns check_device_timeout() actually needs — devices can
+    # have a large health_data/component_statuses JSON blob that we don't
+    # want to pull across the wire on every single timeout sweep.
+    devices = Device.objects.filter(active=True).only(
+        "id", "last_seen", "status", "name"
     )
 
     for device in devices:
@@ -140,11 +120,6 @@ def check_all_device_timeouts(
     return offline_count
 
 
-# ============================================================================
-# All cameras
-# ============================================================================
-
-
 def check_all_camera_timeouts(
     timeout_seconds: int = DEFAULT_HEARTBEAT_TIMEOUT_SECONDS,
     now=None,
@@ -155,8 +130,8 @@ def check_all_camera_timeouts(
 
     offline_count = 0
 
-    cameras = Camera.objects.filter(
-        active=True,
+    cameras = Camera.objects.filter(active=True).only(
+        "id", "last_seen", "status", "name"
     )
 
     for camera in cameras:
@@ -175,11 +150,6 @@ def check_all_camera_timeouts(
             offline_count += 1
 
     return offline_count
-
-
-# ============================================================================
-# Everything
-# ============================================================================
 
 
 def check_all_heartbeats(

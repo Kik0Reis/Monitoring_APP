@@ -18,6 +18,8 @@ meaningful, and (for devices) fill in its real serial number.
 
 import logging
 
+from django.db import IntegrityError, transaction
+
 from cameras.models import Camera
 from countries.models import Country
 from customers.models import Customer
@@ -25,6 +27,47 @@ from devices.models import Device, DeviceType
 from locations.models import Location
 
 logger = logging.getLogger(__name__)
+
+
+def _resolve_by_mqtt_key(model, mqtt_key, lookup, name_field, defaults):
+    """
+    Shared get-or-create logic for models with both a unique `name` and a
+    separately-unique `mqtt_key` (Customer, Location).
+
+    A record with this name may already exist without an mqtt_key (e.g.
+    created by hand through the UI before any MQTT traffic arrived for
+    it). If we only searched by mqtt_key, get_or_create would try to
+    insert a second row with the same name and crash on the unique
+    (scope, name) constraint. So we check by name first and adopt that
+    record instead of creating a duplicate.
+
+    `lookup` is the queryset filter identifying the parent scope, e.g.
+    {"country": country} for Customer or {"customer": customer} for
+    Location.
+    """
+
+    existing = model.objects.filter(mqtt_key=mqtt_key, **lookup).first()
+    if existing:
+        return existing, False
+
+    existing = model.objects.filter(
+        **{name_field: mqtt_key, "mqtt_key__isnull": True}, **lookup
+    ).first()
+    if existing:
+        existing.mqtt_key = mqtt_key
+        existing.save(update_fields=["mqtt_key", "updated_at"])
+        return existing, False
+
+    try:
+        with transaction.atomic():
+            return (
+                model.objects.create(mqtt_key=mqtt_key, **lookup, **defaults),
+                True,
+            )
+    except IntegrityError:
+        # Lost a race with another request that created the same record
+        # in between our checks above and our insert — just use theirs.
+        return model.objects.get(mqtt_key=mqtt_key, **lookup), False
 
 
 def resolve_device(
@@ -86,13 +129,12 @@ def _resolve_country(country_code: str) -> Country:
 def _resolve_customer(country: Country, client_key: str) -> Customer:
     key = client_key.strip()
 
-    customer, created = Customer.objects.get_or_create(
-        country=country,
+    customer, created = _resolve_by_mqtt_key(
+        Customer,
         mqtt_key=key,
-        defaults={
-            "name": key,
-            "pending_review": True,
-        },
+        lookup={"country": country},
+        name_field="name",
+        defaults={"name": key, "pending_review": True},
     )
 
     if created:
@@ -108,13 +150,12 @@ def _resolve_customer(country: Country, client_key: str) -> Customer:
 def _resolve_location(customer: Customer, installation_key: str) -> Location:
     key = installation_key.strip()
 
-    location, created = Location.objects.get_or_create(
-        customer=customer,
+    location, created = _resolve_by_mqtt_key(
+        Location,
         mqtt_key=key,
-        defaults={
-            "name": key,
-            "pending_review": True,
-        },
+        lookup={"customer": customer},
+        name_field="name",
+        defaults={"name": key, "pending_review": True},
     )
 
     if created:
@@ -130,20 +171,28 @@ def _resolve_location(customer: Customer, installation_key: str) -> Location:
 def _resolve_device(location: Location, device_id: str) -> Device:
     identifier = device_id.strip()
 
-    device, created = Device.objects.get_or_create(
-        location=location,
-        mqtt_identifier=identifier,
-        defaults={
-            "name": identifier,
-            # No serial number is available from MQTT. This placeholder
-            # is guaranteed unique (location.id is globally unique) and
-            # obviously a placeholder, so it's easy to spot in the UI and
-            # replace with the device's real serial number later.
-            "serial_number": f"AUTO-{location.id}-{identifier}",
-            "device_type": DeviceType.EDGE,
-            "pending_review": True,
-        },
-    )
+    try:
+        device, created = Device.objects.get_or_create(
+            location=location,
+            mqtt_identifier=identifier,
+            defaults={
+                "name": identifier,
+                # No serial number is available from MQTT. This placeholder
+                # is guaranteed unique (location.id is globally unique) and
+                # obviously a placeholder, so it's easy to spot in the UI
+                # and replace with the device's real serial number later.
+                "serial_number": f"AUTO-{location.id}-{identifier}",
+                "device_type": DeviceType.EDGE,
+                "pending_review": True,
+            },
+        )
+    except IntegrityError:
+        # A manually-created device at this location already has the
+        # name we'd want to use (unique_device_name_per_location), even
+        # though its mqtt_identifier doesn't match. Fall back to it
+        # rather than crashing MQTT processing.
+        device = Device.objects.get(location=location, name=identifier)
+        created = False
 
     if created:
         logger.warning(

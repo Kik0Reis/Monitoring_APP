@@ -6,13 +6,19 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('monitoring', '0002_cameraalert'),
+        ("monitoring", "0002_cameraalert"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='cameraalert',
-            name='alert_type',
-            field=models.CharField(choices=[('CAMERA_ALERT', 'Camera Alert'), ('CAMERA_ERROR', 'Camera Error')], max_length=30),
+            model_name="cameraalert",
+            name="alert_type",
+            field=models.CharField(
+                choices=[
+                    ("CAMERA_ALERT", "Camera Alert"),
+                    ("CAMERA_ERROR", "Camera Error"),
+                ],
+                max_length=30,
+            ),
         ),
     ]

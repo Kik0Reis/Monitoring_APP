@@ -6,13 +6,13 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('countries', '0002_alter_country_name'),
+        ("countries", "0002_alter_country_name"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='country',
-            name='pending_review',
+            model_name="country",
+            name="pending_review",
             field=models.BooleanField(default=False),
         ),
     ]

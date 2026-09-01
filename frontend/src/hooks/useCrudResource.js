@@ -46,9 +46,7 @@ export function useCrudResource({
 
   const filtersKey = JSON.stringify(filters);
 
-  // ==========================================================
   // Load
-  // ==========================================================
 
   const load = useCallback(async () => {
     try {
@@ -115,9 +113,7 @@ export function useCrudResource({
     }
   }
 
-  // ==========================================================
   // Modal open/close
-  // ==========================================================
 
   function openCreate(overrides = {}) {
     setSelected(null);
@@ -158,9 +154,7 @@ export function useCrudResource({
     }));
   }
 
-  // ==========================================================
   // Submit (create/edit)
-  // ==========================================================
 
   async function handleSubmit() {
     if (validate) {
@@ -198,9 +192,7 @@ export function useCrudResource({
     }
   }
 
-  // ==========================================================
   // Delete
-  // ==========================================================
 
   async function handleDelete(item) {
     const confirmed = window.confirm(

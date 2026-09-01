@@ -16,11 +16,6 @@ from locations.models import Location
 from monitoring.models import CameraAlert, CameraAlertType, DeviceAlert
 
 
-# ============================================================================
-# Summary counters
-# ============================================================================
-
-
 def get_dashboard_summary():
     """
     Return the current monitoring summary.
@@ -37,7 +32,6 @@ def get_dashboard_summary():
     }
 
 
-# ============================================================================
 # Problems (device/camera health & connectivity issues)
 #
 # "Problem" alerts have an active/resolved lifecycle: the backend reuses
@@ -46,7 +40,6 @@ def get_dashboard_summary():
 # exactly one row per device/camera that currently needs attention. With
 # active_only=False you get the full history, including old, resolved
 # alerts from devices that have flapped online/offline repeatedly.
-# ============================================================================
 
 
 def get_problem_alerts(limit=10, active_only=True):
@@ -58,19 +51,14 @@ def get_problem_alerts(limit=10, active_only=True):
     (those are real-world detections, see get_camera_detections below).
     """
 
-    device_alerts = (
-        DeviceAlert.objects
-        .select_related("device", "device__location")
-    )
+    device_alerts = DeviceAlert.objects.select_related("device", "device__location")
 
-    camera_error_alerts = (
-        CameraAlert.objects
-        .filter(alert_type=CameraAlertType.CAMERA_ERROR)
-        .select_related(
-            "camera",
-            "camera__device",
-            "camera__device__location",
-        )
+    camera_error_alerts = CameraAlert.objects.filter(
+        alert_type=CameraAlertType.CAMERA_ERROR
+    ).select_related(
+        "camera",
+        "camera__device",
+        "camera__device__location",
     )
 
     if active_only:
@@ -92,19 +80,16 @@ def get_problem_alerts(limit=10, active_only=True):
     return alerts
 
 
-# ============================================================================
 # Detections (real events reported by a camera over MQTT, e.g. smoke,
 # person, or other AI-detected events)
 #
 # These are a chronological event log, not a "currently broken" list, so
 # there's no active/resolved filtering here — every detection is shown.
-# ============================================================================
 
 
 def get_camera_detections(limit=50):
     camera_alerts = (
-        CameraAlert.objects
-        .filter(alert_type=CameraAlertType.CAMERA_ALERT)
+        CameraAlert.objects.filter(alert_type=CameraAlertType.CAMERA_ALERT)
         .select_related(
             "camera",
             "camera__device",
@@ -135,21 +120,23 @@ def _serialize_device_alerts(device_alerts):
     for alert in device_alerts:
         location = alert.device.location
 
-        alerts.append({
-            "id": f"device-{alert.id}",
-            "type": alert_type_labels.get(alert.alert_type, "Device"),
-            "alert_type": alert.alert_type,
-            "severity": alert.severity,
-            "device_id": alert.device.id,
-            "device_name": alert.device.name,
-            "location_id": location.id if location else None,
-            "location_name": location.name if location else None,
-            "camera_id": None,
-            "camera_name": None,
-            "message": alert.message,
-            "active": alert.active,
-            "created_at": alert.created_at,
-        })
+        alerts.append(
+            {
+                "id": f"device-{alert.id}",
+                "type": alert_type_labels.get(alert.alert_type, "Device"),
+                "alert_type": alert.alert_type,
+                "severity": alert.severity,
+                "device_id": alert.device.id,
+                "device_name": alert.device.name,
+                "location_id": location.id if location else None,
+                "location_name": location.name if location else None,
+                "camera_id": None,
+                "camera_name": None,
+                "message": alert.message,
+                "active": alert.active,
+                "created_at": alert.created_at,
+            }
+        )
 
     return alerts
 
@@ -167,38 +154,36 @@ def _serialize_camera_alerts(camera_alerts):
         device = camera.device
         location = device.location if device else None
 
-        alerts.append({
-            "id": f"camera-{alert.id}",
-            "type": alert_type_labels.get(alert.alert_type, "Camera"),
-            "alert_type": alert.alert_type,
-            "severity": alert.severity,
-            "device_id": device.id if device else None,
-            "device_name": device.name if device else None,
-            "location_id": location.id if location else None,
-            "location_name": location.name if location else None,
-            "camera_id": camera.id,
-            "camera_name": camera.name,
-            "message": alert.message,
-            "active": alert.active,
-            "created_at": alert.created_at,
-        })
+        alerts.append(
+            {
+                "id": f"camera-{alert.id}",
+                "type": alert_type_labels.get(alert.alert_type, "Camera"),
+                "alert_type": alert.alert_type,
+                "severity": alert.severity,
+                "device_id": device.id if device else None,
+                "device_name": device.name if device else None,
+                "location_id": location.id if location else None,
+                "location_name": location.name if location else None,
+                "camera_id": camera.id,
+                "camera_name": camera.name,
+                "message": alert.message,
+                "active": alert.active,
+                "created_at": alert.created_at,
+            }
+        )
 
     return alerts
 
 
-# ============================================================================
 # Devices with problems
 #
 # Individual, device-level view of "what is currently broken" so the
 # frontend dashboard can link straight to the offending device.
-# ============================================================================
 
 
 def _device_has_component_problem(device):
     component_statuses = (
-        device.component_statuses
-        if isinstance(device.component_statuses, dict)
-        else {}
+        device.component_statuses if isinstance(device.component_statuses, dict) else {}
     )
 
     unhealthy = []
@@ -224,8 +209,7 @@ def get_devices_with_problems(limit=10):
     """
 
     devices = (
-        Device.objects
-        .filter(active=True, device_type="EDGE")
+        Device.objects.filter(active=True, device_type="EDGE")
         .select_related("location")
         .annotate(
             active_alert_count=Count(
@@ -247,9 +231,7 @@ def get_devices_with_problems(limit=10):
         )
 
         if not (
-            has_status_problem
-            or unhealthy_components
-            or device.active_alert_count > 0
+            has_status_problem or unhealthy_components or device.active_alert_count > 0
         ):
             continue
 
@@ -261,33 +243,24 @@ def get_devices_with_problems(limit=10):
             issues.append("Status unknown")
 
         if unhealthy_components:
-            issues.append(
-                "Unhealthy component(s): "
-                + ", ".join(unhealthy_components)
-            )
+            issues.append("Unhealthy component(s): " + ", ".join(unhealthy_components))
 
         if device.active_alert_count > 0:
-            issues.append(
-                f"{device.active_alert_count} active alert(s)"
-            )
+            issues.append(f"{device.active_alert_count} active alert(s)")
 
-        result.append({
-            "id": device.id,
-            "name": device.name,
-            "status": device.status,
-            "location_id": (
-                device.location.id if device.location else None
-            ),
-            "location_name": (
-                device.location.name if device.location else None
-            ),
-            "issues": issues,
-            "last_seen": (
-                device.last_seen.isoformat()
-                if device.last_seen
-                else None
-            ),
-        })
+        result.append(
+            {
+                "id": device.id,
+                "name": device.name,
+                "status": device.status,
+                "location_id": (device.location.id if device.location else None),
+                "location_name": (device.location.name if device.location else None),
+                "issues": issues,
+                "last_seen": (
+                    device.last_seen.isoformat() if device.last_seen else None
+                ),
+            }
+        )
 
     # Offline devices first, then unknown, then everything else.
     status_priority = {
@@ -306,11 +279,6 @@ def get_devices_with_problems(limit=10):
     return result[:limit]
 
 
-# ============================================================================
-# Locations with problems
-# ============================================================================
-
-
 def get_locations_with_problems(limit=10):
     """
     Return locations that currently have monitoring problems.
@@ -324,8 +292,7 @@ def get_locations_with_problems(limit=10):
     """
 
     locations = (
-        Location.objects
-        .annotate(
+        Location.objects.annotate(
             offline_devices=Count(
                 "devices",
                 filter=Q(
@@ -392,22 +359,22 @@ def get_locations_with_problems(limit=10):
         status = (
             "OFFLINE"
             if location.offline_devices > 0
-            else "UNKNOWN"
-            if location.unknown_devices > 0
-            else "WARNING"
+            else "UNKNOWN" if location.unknown_devices > 0 else "WARNING"
         )
 
-        result.append({
-            "id": location.id,
-            "name": location.name,
-            "status": status,
-            "offline_devices": location.offline_devices,
-            "unknown_devices": location.unknown_devices,
-            "active_device_alerts": location.active_device_alerts,
-            "offline_cameras": location.offline_cameras,
-            "active_camera_alerts": location.active_camera_alerts,
-            "problem_count": problem_count,
-        })
+        result.append(
+            {
+                "id": location.id,
+                "name": location.name,
+                "status": status,
+                "offline_devices": location.offline_devices,
+                "unknown_devices": location.unknown_devices,
+                "active_device_alerts": location.active_device_alerts,
+                "offline_cameras": location.offline_cameras,
+                "active_camera_alerts": location.active_camera_alerts,
+                "problem_count": problem_count,
+            }
+        )
 
     result.sort(
         key=lambda location: (
@@ -418,11 +385,6 @@ def get_locations_with_problems(limit=10):
     )
 
     return result[:limit]
-
-
-# ============================================================================
-# Combined dashboard payload
-# ============================================================================
 
 
 def get_dashboard_data():

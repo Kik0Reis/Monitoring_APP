@@ -24,7 +24,6 @@ from django.db import transaction
 from django.utils import timezone
 
 from devices.models import Device, DeviceStatus
-
 from monitoring.models import (
     AlertSeverity,
     AlertType,
@@ -33,10 +32,13 @@ from monitoring.models import (
     DeviceStatusHistory,
 )
 
+# Component-level status strings (as reported over MQTT) that count as
+# "everything is fine". Anything else is treated as unhealthy.
+HEALTHY_COMPONENT_STATUSES = {"up", "online", "healthy"}
 
-# ============================================================================
-# Device status
-# ============================================================================
+
+def _is_component_healthy(status: str) -> bool:
+    return str(status).lower() in HEALTHY_COMPONENT_STATUSES
 
 
 @transaction.atomic
@@ -46,9 +48,7 @@ def update_device_status(
 ) -> Device:
 
     if new_status not in DeviceStatus.values:
-        raise ValueError(
-            f"Invalid device status: {new_status}"
-        )
+        raise ValueError(f"Invalid device status: {new_status}")
 
     old_status = device.status
 
@@ -73,11 +73,6 @@ def update_device_status(
     return device
 
 
-# ============================================================================
-# Last seen
-# ============================================================================
-
-
 def update_last_seen(
     device: Device,
     received_at=None,
@@ -96,11 +91,6 @@ def update_last_seen(
     )
 
     return device
-
-
-# ============================================================================
-# Device heartbeat
-# ============================================================================
 
 
 @transaction.atomic
@@ -127,11 +117,6 @@ def record_heartbeat(
     return heartbeat
 
 
-# ============================================================================
-# Offline alert
-# ============================================================================
-
-
 def create_offline_alert(
     device: Device,
 ) -> DeviceAlert:
@@ -149,15 +134,8 @@ def create_offline_alert(
         device=device,
         alert_type=AlertType.DEVICE_OFFLINE,
         severity=AlertSeverity.CRITICAL,
-        message=(
-            f"Device '{device.name}' is offline."
-        ),
+        message=(f"Device '{device.name}' is offline."),
     )
-
-
-# ============================================================================
-# Resolve offline alerts
-# ============================================================================
 
 
 def resolve_offline_alerts(
@@ -172,11 +150,6 @@ def resolve_offline_alerts(
         active=False,
         resolved_at=timezone.now(),
     )
-
-
-# ============================================================================
-# Component status
-# ============================================================================
 
 
 @transaction.atomic
@@ -200,18 +173,12 @@ def update_component_status(
     """
 
     if not component_name:
-        raise ValueError(
-            "Component name cannot be empty."
-        )
+        raise ValueError("Component name cannot be empty.")
 
     if not isinstance(payload, dict):
-        raise ValueError(
-            "Component status payload must be a dictionary."
-        )
+        raise ValueError("Component status payload must be a dictionary.")
 
-    component_statuses = dict(
-        device.component_statuses or {}
-    )
+    component_statuses = dict(device.component_statuses or {})
 
     component_statuses[component_name] = payload
 
@@ -225,11 +192,6 @@ def update_component_status(
     )
 
     return device
-
-
-# ============================================================================
-# Component health alert
-# ============================================================================
 
 
 def create_health_alert(
@@ -275,11 +237,6 @@ def resolve_health_alerts(
     )
 
 
-# ============================================================================
-# Process Edge status
-# ============================================================================
-
-
 @transaction.atomic
 def process_device_status(
     device: Device,
@@ -309,11 +266,9 @@ def process_device_status(
 
     status = status.lower()
 
-    # ========================================================================
     # Actual Edge status
     #
     # status/aiaction-edge
-    # ========================================================================
 
     if source == "aiaction-edge":
 
@@ -355,17 +310,13 @@ def process_device_status(
 
             return device
 
-        raise ValueError(
-            f"Invalid Edge status: {status}"
-        )
+        raise ValueError(f"Invalid Edge status: {status}")
 
-    # ========================================================================
     # Internal component status
     #
     # detectorapi
     # detector
     # idmr
-    # ========================================================================
 
     component_payload = dict(payload or {})
     component_payload.setdefault(
@@ -396,7 +347,7 @@ def process_device_status(
     resolve_offline_alerts(device)
 
     # Component unhealthy?
-    if status not in {"up", "online", "healthy"}:
+    if not _is_component_healthy(status):
 
         create_health_alert(
             device=device,
@@ -417,11 +368,6 @@ def process_device_status(
     return device
 
 
-# ============================================================================
-# Re-evaluate component health
-# ============================================================================
-
-
 def process_component_health_alerts(
     device: Device,
 ) -> None:
@@ -433,9 +379,7 @@ def process_component_health_alerts(
     If all known components are healthy, resolve the health alert.
     """
 
-    component_statuses = (
-        device.component_statuses or {}
-    )
+    component_statuses = device.component_statuses or {}
 
     unhealthy_components = []
 
@@ -444,18 +388,10 @@ def process_component_health_alerts(
         if not isinstance(component, dict):
             continue
 
-        status = str(
-            component.get("status", "")
-        ).lower()
+        status = str(component.get("status", "")).lower()
 
-        if status not in {
-            "up",
-            "online",
-            "healthy",
-        }:
-            unhealthy_components.append(
-                component_name
-            )
+        if not _is_component_healthy(status):
+            unhealthy_components.append(component_name)
 
     if unhealthy_components:
 
@@ -468,11 +404,6 @@ def process_component_health_alerts(
     else:
 
         resolve_health_alerts(device)
-
-
-# ============================================================================
-# Process complete health message
-# ============================================================================
 
 
 @transaction.atomic
@@ -502,14 +433,9 @@ def process_device_health(
     # Store complete health information.
     device.health_data = payload
 
-    # ========================================================================
     # Extract component statuses
-    # ========================================================================
 
-    components = payload.get(
-        "components",
-        {},
-    )
+    components = payload.get("components", {})
 
     if not isinstance(components, dict):
         components = {}
@@ -525,18 +451,10 @@ def process_device_health(
 
         component_statuses[component_name] = component
 
-        status = str(
-            component.get("status", "")
-        ).lower()
+        status = str(component.get("status", "")).lower()
 
-        if status not in {
-            "up",
-            "online",
-            "healthy",
-        }:
-            unhealthy_components.append(
-                component_name
-            )
+        if not _is_component_healthy(status):
+            unhealthy_components.append(component_name)
 
     device.component_statuses = component_statuses
 
@@ -548,9 +466,7 @@ def process_device_health(
         ]
     )
 
-    # ========================================================================
     # Health alerts
-    # ========================================================================
 
     if unhealthy_components:
 

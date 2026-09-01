@@ -68,26 +68,32 @@ class LocationSerializer(serializers.ModelSerializer):
         # guard against the extra query being unavoidable in that case.
         country = customer.country
 
-        trail.append({
-            "type": "country",
-            "id": country.id,
-            "name": country.name,
-            "path": f"/countries/{country.id}",
-        })
+        trail.append(
+            {
+                "type": "country",
+                "id": country.id,
+                "name": country.name,
+                "path": f"/countries/{country.id}",
+            }
+        )
 
-        trail.append({
-            "type": "customer",
-            "id": customer.id,
-            "name": customer.name,
-            "path": f"/clients/{customer.id}",
-        })
+        trail.append(
+            {
+                "type": "customer",
+                "id": customer.id,
+                "name": customer.name,
+                "path": f"/clients/{customer.id}",
+            }
+        )
 
-        trail.append({
-            "type": "location",
-            "id": obj.id,
-            "name": obj.name,
-            "path": f"/locations/{obj.id}",
-        })
+        trail.append(
+            {
+                "type": "location",
+                "id": obj.id,
+                "name": obj.name,
+                "path": f"/locations/{obj.id}",
+            }
+        )
 
         return trail
 
@@ -126,11 +132,7 @@ class LocationSerializer(serializers.ModelSerializer):
 
         if customer and not customer.active:
             raise serializers.ValidationError(
-                {
-                    "customer_id": (
-                        "Cannot assign a location to an inactive customer."
-                    )
-                }
+                {"customer_id": ("Cannot assign a location to an inactive customer.")}
             )
 
         return attrs

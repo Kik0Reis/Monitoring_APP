@@ -1,5 +1,151 @@
 # CHANGES.md — What was updated in this pass
 
+(Previous pass's notes are preserved further down this file, unchanged.)
+
+## Setup after unzipping
+This archive does **not** include `frontend/node_modules`, `backend/venv`,
+`frontend/dist`, or `backend/db.sqlite3` (they're huge and 100%
+regenerable). Before running:
+
+    cd backend && python -m venv venv && source venv/bin/activate
+    pip install -r requirements.txt
+    python manage.py migrate
+    python manage.py runserver
+
+    cd frontend && npm install && npm run dev
+
+Your `.env` files were kept, with two new variables added at the bottom
+of `backend/.env` (retention settings, see below) and a new
+`frontend/.env.example` (API base URL — copy it to `.env` if you want to
+point the frontend at a non-default backend URL).
+
+## 1. Heartbeat / database retention (the main ask)
+
+`DeviceHeartbeat` rows were never deleted, so the table only ever grew.
+
+- New settings: `HEARTBEAT_RETENTION_DAYS` (default 14) and
+  `HEARTBEAT_CLEANUP_INTERVAL_HOURS` (default 24), both overridable via
+  `.env`.
+- New `backend/monitoring/services/retention.py` — deletes heartbeats
+  older than the retention window, in small batches, so it doesn't lock
+  the table on a big delete.
+- New management command: `python manage.py cleanup_heartbeats
+  [--days N]`, for running it by hand or from a cron job.
+- The `heartbeat_worker` process (already running 24/7 per
+  `docker-compose.yml`) now runs this cleanup automatically on its own
+  schedule — no extra infrastructure (cron, Celery, etc.) needed.
+- Tests added in `monitoring/services/tests_retention.py`.
+
+If you want heartbeats kept longer or shorter, just change
+`HEARTBEAT_RETENTION_DAYS` in `.env`.
+
+## 2. Real bugs fixed
+
+- **Customer/Location auto-provisioning crash.** `mqtt/provisioning.py`
+  looked up existing Customers/Locations by `mqtt_key`, but the database's
+  uniqueness constraint is on `name`. If a Customer or Location was ever
+  created by hand (e.g. through the admin, before any MQTT traffic
+  existed for it) with no `mqtt_key` set, the very next MQTT message for
+  that customer would crash with an `IntegrityError` trying to create a
+  duplicate. Fixed with a proper "adopt the existing record" fallback,
+  plus a safety net for a race between two requests hitting this at once.
+  This is the bug that was breaking the `mqtt` tests before this pass —
+  unrelated to any of the refactoring below.
+- **Dead code removed**: an unused `parse_message()` alias in
+  `mqtt/parser.py`, and redundant local re-imports in `monitoring/tests.py`
+  that were shadowing a module-level import.
+- **Stale test fixed**: one MQTT test asserted behavior that no longer
+  matched what the (correct) current code does for an unknown camera. Fixed
+  the assertion and added a second test covering the real, known-camera
+  path so both branches are actually tested.
+- **Hardcoded API URL**: the frontend called `http://localhost:8000/api`
+  directly, which only works for local dev. It's now
+  `import.meta.env.VITE_API_BASE_URL`, configurable per environment (see
+  `frontend/.env.example`), defaulting to the old value so nothing breaks
+  if you don't set it.
+
+## 3. Readability
+
+- The whole backend was run through `black` + `isort`, which mostly
+  removed the "every single argument on its own line" formatting that
+  made the code hard to scan.
+- Removed the repetitive `# ============` banner comments that appeared
+  before almost every function. Where the banner had actually useful
+  context in it, that text was kept as a normal comment; where it was
+  just a restated section title, it was dropped since the function name
+  already says that.
+- Rewrote `mqtt/subscriber.py` and `mqtt/service.py` from scratch with
+  the same behavior but far less ceremony.
+- Tidied a few stray comments (a "change this when I add auth" note
+  turned into an actual TODO explaining what's needed; a couple of
+  string-concatenation artifacts cleaned up).
+
+## 4. Modularity / de-spaghetti
+
+- `mqtt/service.py` used to be one long function with a chain of
+  `if/elif` branches handling six different MQTT message types. It's now
+  a small router (`process_mqtt_message`) that dispatches to
+  `_handle_device_message` (status/health/cameras) or
+  `_handle_camera_message` (alert/event/error) — same behavior, but each
+  piece is now easy to read and to extend with a new message type
+  without touching the others.
+- `mqtt/provisioning.py`'s duplicated "look up by key, fall back to
+  looking up by name, then create" logic for Customer and Location was
+  pulled into one shared `_resolve_by_mqtt_key()` helper instead of two
+  near-identical copies.
+- `monitoring/services/device_health.py` checked a device/component
+  status against the same `{"up", "online", "healthy"}` set in three
+  separate places. That's now a single `_is_component_healthy()` helper.
+
+## 5. Scalability
+
+- Heartbeat/camera timeout sweeps (`heartbeat_monitor.py`) now use
+  `.only(...)` to fetch just the columns they need, instead of pulling
+  every device/camera's full row (including potentially large JSON health
+  blobs) on every timeout check.
+- The retention cleanup above deletes in batches rather than one giant
+  query, so it stays cheap even if the table has gotten large before this
+  update is deployed.
+- The frontend's API base URL is now environment-configurable (see
+  above), which is a prerequisite for actually deploying this anywhere
+  beyond one dev's laptop.
+
+## 6. Frontend
+
+The frontend was already in decent shape — a clean `eslint` pass, no
+dead code, and a shared `useCrudResource` hook already doing the heavy
+lifting for the list pages instead of duplicating CRUD logic across
+Countries/Clients/Locations/Devices/Cameras. Changes here were lighter:
+
+- Removed the one AI-style banner-comment block, in `useCrudResource.js`.
+- Made the API base URL configurable (see "Real bugs fixed" above).
+
+## What's not included
+
+This zip does **not** include `node_modules/`, the Python `venv/`,
+`frontend/dist/`, or `db.sqlite3` — those are regenerated with
+`npm install`, `pip install -r requirements.txt`, `npm run build`, and
+`python manage.py migrate` respectively, and shipping them would just
+bloat the download.
+
+## Suggestions for next time (not done here, out of scope for this pass)
+
+- No authentication/permissions are configured yet — every API endpoint
+  is open. Worth locking down before this goes anywhere public.
+- Consider the same retention treatment for `DeviceStatusHistory` and
+  resolved `DeviceAlert`/`CameraAlert` rows if those start growing large
+  too — the `retention.py` pattern here would extend cleanly to them.
+- If MQTT volume grows a lot, the subscriber currently processes messages
+  synchronously one at a time; a queue (e.g. Celery) between the
+  subscriber and the monitoring services would let you scale processing
+  independently of the MQTT connection.
+
+---
+
+# Previous pass's notes (kept for history)
+
+# CHANGES.md — What was updated in this pass
+
 ## Setup after unzipping
 This archive does **not** include `frontend/node_modules` or `backend/venv`
 (they're huge and 100% regenerable). Before running:

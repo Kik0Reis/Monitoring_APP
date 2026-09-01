@@ -6,13 +6,15 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('devices', '0001_initial'),
-        ('locations', '0002_location_unique_location_name_per_customer'),
+        ("devices", "0001_initial"),
+        ("locations", "0002_location_unique_location_name_per_customer"),
     ]
 
     operations = [
         migrations.AddConstraint(
-            model_name='device',
-            constraint=models.UniqueConstraint(fields=('location', 'name'), name='unique_device_name_per_location'),
+            model_name="device",
+            constraint=models.UniqueConstraint(
+                fields=("location", "name"), name="unique_device_name_per_location"
+            ),
         ),
     ]
