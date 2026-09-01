@@ -15,6 +15,7 @@ from django.utils import timezone
 
 from cameras.models import Camera, CameraStatus
 from devices.models import Device, DeviceStatus
+from monitoring.services.camera_monitor import update_camera_status
 from monitoring.services.device_health import (
     create_offline_alert,
     update_device_status,
@@ -73,13 +74,10 @@ def check_camera_timeout(
 
     if camera.status != CameraStatus.OFFLINE:
 
-        camera.status = CameraStatus.OFFLINE
-
-        camera.save(
-            update_fields=[
-                "status",
-                "updated_at",
-            ]
+        update_camera_status(
+            camera=camera,
+            new_status=CameraStatus.OFFLINE,
+            received_at=now,
         )
 
     return camera

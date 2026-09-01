@@ -25,6 +25,8 @@ from locations.models import Location
 from monitoring.models import (
     AlertSeverity,
     AlertType,
+    CameraAlert,
+    CameraAlertType,
     DeviceAlert,
     DeviceHeartbeat,
 )
@@ -122,7 +124,8 @@ class CameraHeartbeatTimeoutTests(TestCase):
 
     def test_camera_becomes_offline_after_timeout(self):
         """
-        A camera becomes OFFLINE when its heartbeat has expired.
+        A camera becomes OFFLINE when its heartbeat has expired, and a
+        CAMERA_OFFLINE alert is raised so it shows up on the dashboard.
         """
 
         now = timezone.now()
@@ -142,6 +145,40 @@ class CameraHeartbeatTimeoutTests(TestCase):
         self.assertEqual(
             self.camera.status,
             CameraStatus.OFFLINE,
+        )
+
+        self.assertTrue(
+            CameraAlert.objects.filter(
+                camera=self.camera,
+                alert_type=CameraAlertType.CAMERA_OFFLINE,
+                active=True,
+            ).exists()
+        )
+
+    def test_camera_offline_alert_resolves_when_camera_comes_back(self):
+        """
+        Once a camera reports in again (any status update to ONLINE), the
+        CAMERA_OFFLINE alert raised while it was down should auto-resolve
+        — mirroring how DEVICE_OFFLINE already works for Edge devices.
+        """
+
+        now = timezone.now()
+
+        self.camera.last_seen = now - timedelta(seconds=61)
+        self.camera.save(update_fields=["last_seen"])
+
+        check_camera_timeout(camera=self.camera, timeout_seconds=60, now=now)
+
+        from monitoring.services.camera_monitor import update_camera_status
+
+        update_camera_status(camera=self.camera, new_status=CameraStatus.ONLINE)
+
+        self.assertFalse(
+            CameraAlert.objects.filter(
+                camera=self.camera,
+                alert_type=CameraAlertType.CAMERA_OFFLINE,
+                active=True,
+            ).exists()
         )
 
     # Never-seen camera
