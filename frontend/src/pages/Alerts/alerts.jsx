@@ -60,8 +60,7 @@ function AlertRow({ alert, onClick, showStatus = true }) {
  *   repeating a flapping device's entire history. "Show history" reveals
  *   the full (including resolved) log.
  *
- * - "Detections": real events reported by cameras over MQTT (smoke,
- *   person, etc). These don't have an active/resolved lifecycle — every
+ * - "Detections": real events reported by cameras over MQTT. These don't have an active/resolved lifecycle — every
  *   detection is a distinct event, so it's just a chronological log.
  */
 function Alerts() {
@@ -173,7 +172,7 @@ function Alerts() {
 
       {tab === "detections" && (
         <p className="alerts-tab-description">
-          Events reported directly by cameras over MQTT (e.g. smoke, person detected).
+          Events reported directly by cameras over MQTT.
         </p>
       )}
 
