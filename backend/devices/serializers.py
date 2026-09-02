@@ -25,15 +25,12 @@ class LatestHeartbeatSerializer(serializers.Serializer):
 
 
 class DeviceSerializer(serializers.ModelSerializer):
+    """Validates and (de)serializes Device records for the API."""
 
-    location = LocationSummarySerializer(
-        read_only=True,
-    )
+    location = LocationSummarySerializer(read_only=True)
 
     location_id = serializers.PrimaryKeyRelatedField(
-        queryset=Location.objects.all(),
-        source="location",
-        write_only=True,
+        queryset=Location.objects.all(), source="location", write_only=True
     )
 
     # Number of cameras connected to this device.
@@ -162,7 +159,7 @@ class DeviceSerializer(serializers.ModelSerializer):
 
         if location and not location.active:
             raise serializers.ValidationError(
-                {"location_id": ("Cannot assign a device to an inactive location.")}
+                {"location_id": "Cannot assign a device to an inactive location."}
             )
 
         return attrs

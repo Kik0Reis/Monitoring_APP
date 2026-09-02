@@ -8,6 +8,8 @@ from .serializers import CameraSerializer
 
 
 class CameraViewSet(viewsets.ModelViewSet):
+    """CRUD API for cameras, plus an `approve` action for auto-created ones."""
+
     queryset = Camera.objects.select_related(
         "device",
         "device__location",
@@ -23,13 +25,7 @@ class CameraViewSet(viewsets.ModelViewSet):
         filters.OrderingFilter,
     ]
 
-    filterset_fields = [
-        "device",
-        "status",
-        "active",
-        "channel",
-        "pending_review",
-    ]
+    filterset_fields = ["device", "status", "active", "channel", "pending_review"]
 
     search_fields = [
         "name",
@@ -38,17 +34,9 @@ class CameraViewSet(viewsets.ModelViewSet):
         "device__mqtt_identifier",
     ]
 
-    ordering_fields = [
-        "name",
-        "channel",
-        "status",
-        "last_seen",
-        "created_at",
-    ]
+    ordering_fields = ["name", "channel", "status", "last_seen", "created_at"]
 
-    ordering = [
-        "name",
-    ]
+    ordering = ["name"]
 
     @action(detail=True, methods=["post"])
     def approve(self, request, pk=None):

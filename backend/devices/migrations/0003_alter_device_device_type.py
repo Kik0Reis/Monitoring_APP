@@ -5,9 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
 
-    dependencies = [
-        ("devices", "0002_device_unique_device_name_per_location"),
-    ]
+    dependencies = [("devices", "0002_device_unique_device_name_per_location")]
 
     operations = [
         migrations.AlterField(
@@ -19,5 +17,5 @@ class Migration(migrations.Migration):
                 editable=False,
                 max_length=20,
             ),
-        ),
+        )
     ]

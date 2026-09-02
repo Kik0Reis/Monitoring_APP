@@ -8,9 +8,7 @@ class Migration(migrations.Migration):
 
     initial = True
 
-    dependencies = [
-        ("devices", "0003_alter_device_device_type"),
-    ]
+    dependencies = [("devices", "0003_alter_device_device_type")]
 
     operations = [
         migrations.CreateModel(
@@ -67,5 +65,5 @@ class Migration(migrations.Migration):
                     ),
                 ],
             },
-        ),
+        )
     ]

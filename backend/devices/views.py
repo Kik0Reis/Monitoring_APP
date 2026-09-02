@@ -9,14 +9,11 @@ from .serializers import DeviceSerializer
 
 
 class DeviceViewSet(viewsets.ModelViewSet):
+    """CRUD API for devices, plus an `approve` action for auto-created ones."""
 
     queryset = Device.objects.select_related(
-        "location",
-        "location__customer",
-        "location__customer__country",
-    ).annotate(
-        cameras_count_annotation=Count("cameras", distinct=True),
-    )
+        "location", "location__customer", "location__customer__country"
+    ).annotate(cameras_count_annotation=Count("cameras", distinct=True))
 
     serializer_class = DeviceSerializer
 
@@ -26,28 +23,13 @@ class DeviceViewSet(viewsets.ModelViewSet):
         filters.OrderingFilter,
     ]
 
-    filterset_fields = [
-        "location",
-        "status",
-        "active",
-        "pending_review",
-    ]
+    filterset_fields = ["location", "status", "active", "pending_review"]
 
-    search_fields = [
-        "name",
-        "serial_number",
-        "mqtt_identifier",
-    ]
+    search_fields = ["name", "serial_number", "mqtt_identifier"]
 
-    ordering_fields = [
-        "name",
-        "last_seen",
-        "created_at",
-    ]
+    ordering_fields = ["name", "last_seen", "created_at"]
 
-    ordering = [
-        "name",
-    ]
+    ordering = ["name"]
 
     @action(detail=True, methods=["post"])
     def approve(self, request, pk=None):

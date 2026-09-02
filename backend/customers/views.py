@@ -9,8 +9,10 @@ from .serializers import CustomerSerializer
 
 
 class CustomerViewSet(viewsets.ModelViewSet):
+    """CRUD API for customers, plus an `approve` action for auto-created ones."""
+
     queryset = Customer.objects.select_related("country").annotate(
-        locations_count_annotation=Count("locations", distinct=True),
+        locations_count_annotation=Count("locations", distinct=True)
     )
 
     serializer_class = CustomerSerializer
@@ -21,25 +23,13 @@ class CustomerViewSet(viewsets.ModelViewSet):
         filters.OrderingFilter,
     ]
 
-    filterset_fields = [
-        "country",
-        "active",
-        "pending_review",
-    ]
+    filterset_fields = ["country", "active", "pending_review"]
 
-    search_fields = [
-        "name",
-        "description",
-    ]
+    search_fields = ["name", "description"]
 
-    ordering_fields = [
-        "name",
-        "created_at",
-    ]
+    ordering_fields = ["name", "created_at"]
 
-    ordering = [
-        "name",
-    ]
+    ordering = ["name"]
 
     @action(detail=True, methods=["post"])
     def approve(self, request, pk=None):

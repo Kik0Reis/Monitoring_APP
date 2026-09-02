@@ -9,11 +9,13 @@ from .serializers import CountrySerializer
 
 
 class CountryViewSet(viewsets.ModelViewSet):
+    """CRUD API for countries, plus an `approve` action for auto-created ones."""
+
     # Annotate the number of customers per country so the serializer can
     # expose "customers_count" without an extra query per row. This is what
     # powers the drilldown cards on the frontend (Country -> Customers).
     queryset = Country.objects.annotate(
-        customers_count_annotation=Count("customers", distinct=True),
+        customers_count_annotation=Count("customers", distinct=True)
     )
 
     serializer_class = CountrySerializer
@@ -24,23 +26,13 @@ class CountryViewSet(viewsets.ModelViewSet):
         filters.OrderingFilter,
     ]
 
-    filterset_fields = [
-        "pending_review",
-    ]
+    filterset_fields = ["pending_review"]
 
-    search_fields = [
-        "name",
-        "code",
-    ]
+    search_fields = ["name", "code"]
 
-    ordering_fields = [
-        "name",
-        "created_at",
-    ]
+    ordering_fields = ["name", "created_at"]
 
-    ordering = [
-        "name",
-    ]
+    ordering = ["name"]
 
     @action(detail=True, methods=["post"])
     def approve(self, request, pk=None):

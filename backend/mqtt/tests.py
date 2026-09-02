@@ -25,20 +25,11 @@ class MQTTServiceTests(TestCase):
         Create the Device hierarchy used by the tests.
         """
 
-        cls.country = Country.objects.create(
-            name="Portugal",
-            code="PT",
-        )
+        cls.country = Country.objects.create(name="Portugal", code="PT")
 
-        cls.customer = Customer.objects.create(
-            country=cls.country,
-            name="aitecserv",
-        )
+        cls.customer = Customer.objects.create(country=cls.country, name="aitecserv")
 
-        cls.location = Location.objects.create(
-            customer=cls.customer,
-            name="office2",
-        )
+        cls.location = Location.objects.create(customer=cls.customer, name="office2")
 
         cls.device = Device.objects.create(
             location=cls.location,
@@ -75,21 +66,13 @@ class MQTTServiceTests(TestCase):
             "source": "aiaction",
         }
 
-        process_mqtt_message(
-            topic=topic,
-            payload=payload,
-        )
+        process_mqtt_message(topic=topic, payload=payload)
 
         self.device.refresh_from_db()
 
-        self.assertEqual(
-            self.device.status,
-            DeviceStatus.ONLINE,
-        )
+        self.assertEqual(self.device.status, DeviceStatus.ONLINE)
 
-        self.assertIsNotNone(
-            self.device.last_seen,
-        )
+        self.assertIsNotNone(self.device.last_seen)
 
     # Health message
 
@@ -107,38 +90,20 @@ class MQTTServiceTests(TestCase):
             "source": "aiaction",
             "ttl_seconds": 60,
             "components": {
-                "aiaction_edge": {
-                    "status": "up",
-                },
-                "detector": {
-                    "status": "up",
-                    "latency_ms": 42,
-                },
-                "idmr": {
-                    "status": "up",
-                    "latency_ms": 31,
-                },
-                "requests": {
-                    "status": "up",
-                },
+                "aiaction_edge": {"status": "up"},
+                "detector": {"status": "up", "latency_ms": 42},
+                "idmr": {"status": "up", "latency_ms": 31},
+                "requests": {"status": "up"},
             },
         }
 
-        process_mqtt_message(
-            topic=topic,
-            payload=payload,
-        )
+        process_mqtt_message(topic=topic, payload=payload)
 
         self.device.refresh_from_db()
 
-        self.assertEqual(
-            self.device.status,
-            DeviceStatus.ONLINE,
-        )
+        self.assertEqual(self.device.status, DeviceStatus.ONLINE)
 
-        self.assertIsNotNone(
-            self.device.last_seen,
-        )
+        self.assertIsNotNone(self.device.last_seen)
 
     # Unhealthy component
 
@@ -156,40 +121,24 @@ class MQTTServiceTests(TestCase):
             "source": "aiaction",
             "ttl_seconds": 60,
             "components": {
-                "aiaction_edge": {
-                    "status": "up",
-                },
-                "detector": {
-                    "status": "down",
-                },
-                "idmr": {
-                    "status": "up",
-                },
-                "requests": {
-                    "status": "up",
-                },
+                "aiaction_edge": {"status": "up"},
+                "detector": {"status": "down"},
+                "idmr": {"status": "up"},
+                "requests": {"status": "up"},
             },
         }
 
-        process_mqtt_message(
-            topic=topic,
-            payload=payload,
-        )
+        process_mqtt_message(topic=topic, payload=payload)
 
         self.device.refresh_from_db()
 
         # The device is still communicating.
-        self.assertEqual(
-            self.device.status,
-            DeviceStatus.ONLINE,
-        )
+        self.assertEqual(self.device.status, DeviceStatus.ONLINE)
 
         # A health alert should exist.
         self.assertTrue(
             DeviceAlert.objects.filter(
-                device=self.device,
-                alert_type=AlertType.DEVICE_HEALTH,
-                active=True,
+                device=self.device, alert_type=AlertType.DEVICE_HEALTH, active=True
             ).exists()
         )
 
@@ -224,12 +173,7 @@ class MQTTServiceTests(TestCase):
             "action_code": "HighProbFireDetected",
             "class_label": "smoke",
             "confidence": 0.8741,
-            "bounding_box": [
-                1251,
-                798,
-                1412,
-                971,
-            ],
+            "bounding_box": [1251, 798, 1412, 971],
             "case": "Inside Normal zone",
             "is_first_trigger": True,
             "trigger_count": 1,
@@ -237,10 +181,7 @@ class MQTTServiceTests(TestCase):
             "source": "aiaction",
         }
 
-        result = process_mqtt_message(
-            topic=topic,
-            payload=payload,
-        )
+        result = process_mqtt_message(topic=topic, payload=payload)
 
         self.assertIsNone(result)
 
@@ -290,8 +231,6 @@ class MQTTServiceTests(TestCase):
 
         self.assertTrue(
             CameraAlert.objects.filter(
-                camera=camera,
-                alert_type=CameraAlertType.CAMERA_ALERT,
-                active=True,
+                camera=camera, alert_type=CameraAlertType.CAMERA_ALERT, active=True
             ).exists()
         )

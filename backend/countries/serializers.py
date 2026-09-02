@@ -3,8 +3,8 @@ from rest_framework import serializers
 from .models import Country
 
 
-# Serializer responsible for validating and serializing Country objects.
 class CountrySerializer(serializers.ModelSerializer):
+    """Validates and (de)serializes Country records for the API."""
 
     # Number of customers that belong to this country.
     # Uses the "customers_count_annotation" annotation added by
@@ -24,12 +24,7 @@ class CountrySerializer(serializers.ModelSerializer):
             "updated_at",
         )
 
-        read_only_fields = (
-            "id",
-            "pending_review",
-            "created_at",
-            "updated_at",
-        )
+        read_only_fields = ("id", "pending_review", "created_at", "updated_at")
 
     def get_customers_count(self, obj):
         annotated = getattr(obj, "customers_count_annotation", None)
@@ -40,12 +35,7 @@ class CountrySerializer(serializers.ModelSerializer):
         return obj.customers.count()
 
     def validate_name(self, value):
-        """
-        Validate the country name.
-
-        Remove whitespace.
-        Make sure the name has at least 2 charaters.
-        """
+        """Trim whitespace and require at least 2 characters."""
 
         value = value.strip()
 
@@ -57,13 +47,7 @@ class CountrySerializer(serializers.ModelSerializer):
         return value
 
     def validate_code(self, value):
-        """
-        Validate the country code.
-
-        Remove whitespace.
-        Convert the code to uppercase.
-        Ensure the code has 2 characters.
-        """
+        """Trim whitespace, uppercase it, and require exactly 2 characters."""
 
         value = value.strip().upper()
 
@@ -76,15 +60,8 @@ class CountrySerializer(serializers.ModelSerializer):
 
 
 class CountrySummarySerializer(serializers.ModelSerializer):
-    """
-    Lightweight serializer used when Country is nested
-    inside another serializer.
-    """
+    """Minimal Country fields, for nesting inside other serializers."""
 
     class Meta:
         model = Country
-        fields = (
-            "id",
-            "name",
-            "code",
-        )
+        fields = ("id", "name", "code")

@@ -26,10 +26,7 @@ class Command(BaseCommand):
             help="Heartbeat timeout in seconds.",
         )
         parser.add_argument(
-            "--interval",
-            type=int,
-            default=10,
-            help="Seconds between heartbeat checks.",
+            "--interval", type=int, default=10, help="Seconds between heartbeat checks."
         )
         parser.add_argument(
             "--cleanup-interval-hours",

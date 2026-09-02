@@ -6,18 +6,15 @@ from customers.serializers import CustomerSummarySerializer
 from .models import Location
 
 
-# Serializer responsible for validating and serializing Location objects.
 class LocationSerializer(serializers.ModelSerializer):
+    """Validates and (de)serializes Location records for the API."""
+
     # Nested customer information returned in responses.
-    customer = CustomerSummarySerializer(
-        read_only=True,
-    )
+    customer = CustomerSummarySerializer(read_only=True)
 
     # Customer ID used when creating or updating a location.
     customer_id = serializers.PrimaryKeyRelatedField(
-        queryset=Customer.objects.all(),
-        source="customer",
-        write_only=True,
+        queryset=Customer.objects.all(), source="customer", write_only=True
     )
 
     # Number of devices that belong to this location.
@@ -44,12 +41,7 @@ class LocationSerializer(serializers.ModelSerializer):
             "updated_at",
         )
 
-        read_only_fields = (
-            "id",
-            "pending_review",
-            "created_at",
-            "updated_at",
-        )
+        read_only_fields = ("id", "pending_review", "created_at", "updated_at")
 
     def get_devices_count(self, obj):
         annotated = getattr(obj, "devices_count_annotation", None)
@@ -64,8 +56,9 @@ class LocationSerializer(serializers.ModelSerializer):
 
         trail = []
 
-        # customer.country may not be select_related()'d in every context;
-        # guard against the extra query being unavoidable in that case.
+        # customer.country isn't always select_related()'d by the caller,
+        # so this can trigger an extra query — acceptable here since
+        # breadcrumbs are only built for single-object responses.
         country = customer.country
 
         trail.append(
@@ -98,12 +91,7 @@ class LocationSerializer(serializers.ModelSerializer):
         return trail
 
     def validate_name(self, value):
-        """
-        Validate the location name.
-
-        Remove whitespace.
-        Make sure the name has at least 2 characters.
-        """
+        """Trim whitespace and require at least 2 characters."""
 
         value = value.strip()
 
@@ -115,38 +103,26 @@ class LocationSerializer(serializers.ModelSerializer):
         return value
 
     def validate_description(self, value):
-        """
-        Remove whitespace from the description.
-        """
+        """Trim whitespace from the description."""
 
         return value.strip()
 
     def validate(self, attrs):
-        """
-        Validate business rules involving multiple fields.
-
-        Prevent creating locations under inactive customers.
-        """
+        """Reject locations being assigned to an inactive customer."""
 
         customer = attrs.get("customer")
 
         if customer and not customer.active:
             raise serializers.ValidationError(
-                {"customer_id": ("Cannot assign a location to an inactive customer.")}
+                {"customer_id": "Cannot assign a location to an inactive customer."}
             )
 
         return attrs
 
 
 class LocationSummarySerializer(serializers.ModelSerializer):
-    """
-    Lightweight serializer used when Location is nested
-    inside another serializer.
-    """
+    """Minimal Location fields, for nesting inside other serializers."""
 
     class Meta:
         model = Location
-        fields = (
-            "id",
-            "name",
-        )
+        fields = ("id", "name")

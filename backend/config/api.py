@@ -20,22 +20,10 @@ router.register("cameras", CameraViewSet)
 
 urlpatterns = [
     *router.urls,
-    path(
-        "dashboard/",
-        DashboardView.as_view(),
-        name="dashboard",
-    ),
+    path("dashboard/", DashboardView.as_view(), name="dashboard"),
     # Device/camera health & connectivity problems (offline, unhealthy
     # component, MQTT/system errors, camera errors).
-    path(
-        "problems/",
-        ProblemsView.as_view(),
-        name="problems",
-    ),
+    path("problems/", ProblemsView.as_view(), name="problems"),
     # Real camera detections reported over MQTT (smoke, person, etc.).
-    path(
-        "detections/",
-        DetectionsView.as_view(),
-        name="detections",
-    ),
+    path("detections/", DetectionsView.as_view(), name="detections"),
 ]

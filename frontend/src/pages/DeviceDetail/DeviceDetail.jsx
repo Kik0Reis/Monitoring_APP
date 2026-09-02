@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { Check, Pencil, Trash2 } from "lucide-react";
 
 import { devicesApi, camerasApi } from "../../services/api";
 import { useCrudResource } from "../../hooks/useCrudResource";
@@ -340,17 +341,17 @@ function DeviceDetail() {
                   title="Approve"
                   onClick={() => handleApproveCamera(camera)}
                 >
-                  ✓
+                  <Check size={16} />
                 </button>
               )}
               <button className="icon-button" onClick={() => cameras.openEdit(camera)}>
-                ✎
+                <Pencil size={16} />
               </button>
               <button
                 className="icon-button danger"
                 onClick={() => cameras.handleDelete(camera)}
               >
-                🗑
+                <Trash2 size={16} />
               </button>
             </>
           )}

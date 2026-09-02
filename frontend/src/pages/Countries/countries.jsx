@@ -1,4 +1,5 @@
 import { useNavigate } from "react-router-dom";
+import { Check, Eye, Pencil, Trash2 } from "lucide-react";
 
 import { countriesApi } from "../../services/api";
 import { useCrudResource } from "../../hooks/useCrudResource";
@@ -106,7 +107,7 @@ function Countries() {
                 title="Approve"
                 onClick={() => handleApprove(country)}
               >
-                ✓
+                <Check size={16} />
               </button>
             )}
             <button
@@ -114,21 +115,21 @@ function Countries() {
               aria-label={`View ${country.name}`}
               onClick={() => resource.openView(country)}
             >
-              👁
+              <Eye size={16} />
             </button>
             <button
               className="icon-button"
               aria-label={`Edit ${country.name}`}
               onClick={() => resource.openEdit(country)}
             >
-              ✎
+              <Pencil size={16} />
             </button>
             <button
               className="icon-button danger"
               aria-label={`Delete ${country.name}`}
               onClick={() => resource.handleDelete(country)}
             >
-              🗑
+              <Trash2 size={16} />
             </button>
           </>
         )}

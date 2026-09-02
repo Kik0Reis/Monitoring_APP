@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { Check, Pencil, Trash2 } from "lucide-react";
 
 import { countriesApi, customersApi } from "../../services/api";
 import { useCrudResource } from "../../hooks/useCrudResource";
@@ -172,17 +173,17 @@ function CountryDetail() {
                   title="Approve"
                   onClick={() => handleApproveCustomer(client)}
                 >
-                  ✓
+                  <Check size={16} />
                 </button>
               )}
               <button className="icon-button" onClick={() => customers.openEdit(client)}>
-                ✎
+                <Pencil size={16} />
               </button>
               <button
                 className="icon-button danger"
                 onClick={() => customers.handleDelete(client)}
               >
-                🗑
+                <Trash2 size={16} />
               </button>
             </>
           )}

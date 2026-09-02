@@ -14,16 +14,9 @@ class DeviceAlertAdmin(admin.ModelAdmin):
         "resolved_at",
     )
 
-    list_filter = (
-        "alert_type",
-        "severity",
-        "active",
-    )
+    list_filter = ("alert_type", "severity", "active")
 
-    search_fields = (
-        "device__name",
-        "message",
-    )
+    search_fields = ("device__name", "message")
 
     ordering = ("-created_at",)
 
@@ -39,30 +32,16 @@ class CameraAlertAdmin(admin.ModelAdmin):
         "resolved_at",
     )
 
-    list_filter = (
-        "alert_type",
-        "severity",
-        "active",
-    )
+    list_filter = ("alert_type", "severity", "active")
 
-    search_fields = (
-        "camera__name",
-        "message",
-    )
+    search_fields = ("camera__name", "message")
 
     ordering = ("-created_at",)
 
 
 @admin.register(DeviceHeartbeat)
 class DeviceHeartbeatAdmin(admin.ModelAdmin):
-    list_display = (
-        "device",
-        "received_at",
-        "cpu",
-        "memory",
-        "storage",
-        "temperature",
-    )
+    list_display = ("device", "received_at", "cpu", "memory", "storage", "temperature")
 
     list_filter = ("device",)
 

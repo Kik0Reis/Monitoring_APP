@@ -120,7 +120,7 @@ def _handle_device_message(message_type, device, parsed_message):
 
         device.refresh_from_db()
         logger.info(
-            "MQTT status processed: device=%s source=%s status=%s " "device_status=%s",
+            "MQTT status processed: device=%s source=%s status=%s device_status=%s",
             device,
             parsed_message.get("source"),
             status,
@@ -139,9 +139,7 @@ def _handle_device_message(message_type, device, parsed_message):
     processed = process_camera_status_list(device=device, payload=payload_data)
     device.refresh_from_db()
     logger.info(
-        "MQTT camera status list processed: device=%s cameras=%s",
-        device,
-        processed,
+        "MQTT camera status list processed: device=%s cameras=%s", device, processed
     )
     return device
 
@@ -169,10 +167,7 @@ def _handle_camera_message(message_type, device, parsed_message, topic):
         return None
 
     logger.info(
-        "MQTT camera resolved: device=%s camera=%s channel=%s",
-        device,
-        camera,
-        channel,
+        "MQTT camera resolved: device=%s camera=%s channel=%s", device, camera, channel
     )
 
     payload_data = parsed_message["payload"]

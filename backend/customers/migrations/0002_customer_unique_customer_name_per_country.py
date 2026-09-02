@@ -16,5 +16,5 @@ class Migration(migrations.Migration):
             constraint=models.UniqueConstraint(
                 fields=("country", "name"), name="unique_customer_name_per_country"
             ),
-        ),
+        )
     ]

@@ -9,12 +9,11 @@ from .serializers import LocationSerializer
 
 
 class LocationViewSet(viewsets.ModelViewSet):
+    """CRUD API for locations, plus an `approve` action for auto-created ones."""
+
     queryset = Location.objects.select_related(
-        "customer",
-        "customer__country",
-    ).annotate(
-        devices_count_annotation=Count("devices", distinct=True),
-    )
+        "customer", "customer__country"
+    ).annotate(devices_count_annotation=Count("devices", distinct=True))
 
     serializer_class = LocationSerializer
 
@@ -24,25 +23,13 @@ class LocationViewSet(viewsets.ModelViewSet):
         filters.OrderingFilter,
     ]
 
-    filterset_fields = [
-        "customer",
-        "active",
-        "pending_review",
-    ]
+    filterset_fields = ["customer", "active", "pending_review"]
 
-    search_fields = [
-        "name",
-        "description",
-    ]
+    search_fields = ["name", "description"]
 
-    ordering_fields = [
-        "name",
-        "created_at",
-    ]
+    ordering_fields = ["name", "created_at"]
 
-    ordering = [
-        "name",
-    ]
+    ordering = ["name"]
 
     @action(detail=True, methods=["post"])
     def approve(self, request, pk=None):

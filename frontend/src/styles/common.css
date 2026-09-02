@@ -98,11 +98,14 @@
   background: transparent;
   border: 0;
   cursor: pointer;
-  font-size: var(--text-lg);
   line-height: 1;
   color: var(--color-ink-soft);
   padding: 4px 6px;
   border-radius: var(--radius-sm);
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .icon-button:hover {

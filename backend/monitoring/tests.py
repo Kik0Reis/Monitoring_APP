@@ -30,9 +30,7 @@ from monitoring.models import (
     DeviceAlert,
     DeviceHeartbeat,
 )
-from monitoring.services.device_health import (
-    process_device_health,
-)
+from monitoring.services.device_health import process_device_health
 from monitoring.services.heartbeat_monitor import (
     check_all_heartbeats,
     check_camera_timeout,
@@ -61,20 +59,11 @@ class CameraHeartbeatTimeoutTests(TestCase):
         Camera
         """
 
-        cls.country = Country.objects.create(
-            name="Portugal",
-            code="PT",
-        )
+        cls.country = Country.objects.create(name="Portugal", code="PT")
 
-        cls.customer = Customer.objects.create(
-            country=cls.country,
-            name="aitecserv",
-        )
+        cls.customer = Customer.objects.create(country=cls.country, name="aitecserv")
 
-        cls.location = Location.objects.create(
-            customer=cls.customer,
-            name="office2",
-        )
+        cls.location = Location.objects.create(customer=cls.customer, name="office2")
 
         cls.device = Device.objects.create(
             location=cls.location,
@@ -107,18 +96,11 @@ class CameraHeartbeatTimeoutTests(TestCase):
 
         self.camera.save(update_fields=["last_seen"])
 
-        check_camera_timeout(
-            camera=self.camera,
-            timeout_seconds=60,
-            now=now,
-        )
+        check_camera_timeout(camera=self.camera, timeout_seconds=60, now=now)
 
         self.camera.refresh_from_db()
 
-        self.assertEqual(
-            self.camera.status,
-            CameraStatus.ONLINE,
-        )
+        self.assertEqual(self.camera.status, CameraStatus.ONLINE)
 
     # Camera becomes offline
 
@@ -134,18 +116,11 @@ class CameraHeartbeatTimeoutTests(TestCase):
 
         self.camera.save(update_fields=["last_seen"])
 
-        check_camera_timeout(
-            camera=self.camera,
-            timeout_seconds=60,
-            now=now,
-        )
+        check_camera_timeout(camera=self.camera, timeout_seconds=60, now=now)
 
         self.camera.refresh_from_db()
 
-        self.assertEqual(
-            self.camera.status,
-            CameraStatus.OFFLINE,
-        )
+        self.assertEqual(self.camera.status, CameraStatus.OFFLINE)
 
         self.assertTrue(
             CameraAlert.objects.filter(
@@ -191,24 +166,13 @@ class CameraHeartbeatTimeoutTests(TestCase):
         self.camera.status = CameraStatus.UNKNOWN
         self.camera.last_seen = None
 
-        self.camera.save(
-            update_fields=[
-                "status",
-                "last_seen",
-            ]
-        )
+        self.camera.save(update_fields=["status", "last_seen"])
 
-        check_camera_timeout(
-            camera=self.camera,
-            timeout_seconds=60,
-        )
+        check_camera_timeout(camera=self.camera, timeout_seconds=60)
 
         self.camera.refresh_from_db()
 
-        self.assertEqual(
-            self.camera.status,
-            CameraStatus.UNKNOWN,
-        )
+        self.assertEqual(self.camera.status, CameraStatus.UNKNOWN)
 
     # Camera timeout does not change Edge status
 
@@ -225,35 +189,20 @@ class CameraHeartbeatTimeoutTests(TestCase):
         self.device.status = DeviceStatus.ONLINE
         self.device.last_seen = now
 
-        self.device.save(
-            update_fields=[
-                "status",
-                "last_seen",
-            ]
-        )
+        self.device.save(update_fields=["status", "last_seen"])
 
         self.camera.last_seen = now - timedelta(seconds=61)
 
         self.camera.save(update_fields=["last_seen"])
 
-        check_camera_timeout(
-            camera=self.camera,
-            timeout_seconds=60,
-            now=now,
-        )
+        check_camera_timeout(camera=self.camera, timeout_seconds=60, now=now)
 
         self.camera.refresh_from_db()
         self.device.refresh_from_db()
 
-        self.assertEqual(
-            self.camera.status,
-            CameraStatus.OFFLINE,
-        )
+        self.assertEqual(self.camera.status, CameraStatus.OFFLINE)
 
-        self.assertEqual(
-            self.device.status,
-            DeviceStatus.ONLINE,
-        )
+        self.assertEqual(self.device.status, DeviceStatus.ONLINE)
 
     # Combined heartbeat monitor
 
@@ -275,37 +224,22 @@ class CameraHeartbeatTimeoutTests(TestCase):
 
         self.camera.save(update_fields=["last_seen"])
 
-        result = check_all_heartbeats(
-            timeout_seconds=60,
-            now=now,
-        )
+        result = check_all_heartbeats(timeout_seconds=60, now=now)
 
         self.device.refresh_from_db()
         self.camera.refresh_from_db()
 
         # Device remains online.
-        self.assertEqual(
-            self.device.status,
-            DeviceStatus.ONLINE,
-        )
+        self.assertEqual(self.device.status, DeviceStatus.ONLINE)
 
         # Camera becomes offline.
-        self.assertEqual(
-            self.camera.status,
-            CameraStatus.OFFLINE,
-        )
+        self.assertEqual(self.camera.status, CameraStatus.OFFLINE)
 
         # Combined result should report one offline camera
         # and zero offline devices.
-        self.assertEqual(
-            result["devices_offline"],
-            0,
-        )
+        self.assertEqual(result["devices_offline"], 0)
 
-        self.assertEqual(
-            result["cameras_offline"],
-            1,
-        )
+        self.assertEqual(result["cameras_offline"], 1)
 
 
 class DeviceHealthServiceTests(TestCase):
@@ -327,20 +261,11 @@ class DeviceHealthServiceTests(TestCase):
         Device
         """
 
-        cls.country = Country.objects.create(
-            name="Portugal",
-            code="PT",
-        )
+        cls.country = Country.objects.create(name="Portugal", code="PT")
 
-        cls.customer = Customer.objects.create(
-            country=cls.country,
-            name="aitecserv",
-        )
+        cls.customer = Customer.objects.create(country=cls.country, name="aitecserv")
 
-        cls.location = Location.objects.create(
-            customer=cls.customer,
-            name="office2",
-        )
+        cls.location = Location.objects.create(customer=cls.customer, name="office2")
 
         cls.device = Device.objects.create(
             location=cls.location,
@@ -364,20 +289,10 @@ class DeviceHealthServiceTests(TestCase):
             "source": "aiaction",
             "ttl_seconds": 60,
             "components": {
-                "aiaction_edge": {
-                    "status": "up",
-                },
-                "detector": {
-                    "status": "up",
-                    "latency_ms": 42,
-                },
-                "idmr": {
-                    "status": "up",
-                    "latency_ms": 31,
-                },
-                "requests": {
-                    "status": "up",
-                },
+                "aiaction_edge": {"status": "up"},
+                "detector": {"status": "up", "latency_ms": 42},
+                "idmr": {"status": "up", "latency_ms": 31},
+                "requests": {"status": "up"},
             },
         }
 
@@ -398,9 +313,7 @@ class DeviceHealthServiceTests(TestCase):
         payload = self.healthy_payload()
 
         process_device_health(
-            device=self.device,
-            payload=payload,
-            received_at=received_at,
+            device=self.device, payload=payload, received_at=received_at
         )
 
         # Refresh the object from the database so we verify the
@@ -408,31 +321,18 @@ class DeviceHealthServiceTests(TestCase):
         self.device.refresh_from_db()
 
         # The device is communicating, therefore it is ONLINE.
-        self.assertEqual(
-            self.device.status,
-            DeviceStatus.ONLINE,
-        )
+        self.assertEqual(self.device.status, DeviceStatus.ONLINE)
 
         # last_seen should match the MQTT message receive time.
-        self.assertEqual(
-            self.device.last_seen,
-            received_at,
-        )
+        self.assertEqual(self.device.last_seen, received_at)
 
         # One heartbeat should have been stored.
-        self.assertEqual(
-            DeviceHeartbeat.objects.filter(
-                device=self.device,
-            ).count(),
-            1,
-        )
+        self.assertEqual(DeviceHeartbeat.objects.filter(device=self.device).count(), 1)
 
         # No health alert should exist.
         self.assertFalse(
             DeviceAlert.objects.filter(
-                device=self.device,
-                alert_type=AlertType.DEVICE_HEALTH,
-                active=True,
+                device=self.device, alert_type=AlertType.DEVICE_HEALTH, active=True
             ).exists()
         )
 
@@ -459,56 +359,32 @@ class DeviceHealthServiceTests(TestCase):
         payload["components"]["detector"]["status"] = "down"
 
         process_device_health(
-            device=self.device,
-            payload=payload,
-            received_at=received_at,
+            device=self.device, payload=payload, received_at=received_at
         )
 
         self.device.refresh_from_db()
 
         # The device itself is still communicating.
-        self.assertEqual(
-            self.device.status,
-            DeviceStatus.ONLINE,
-        )
+        self.assertEqual(self.device.status, DeviceStatus.ONLINE)
 
         # last_seen must still be updated.
-        self.assertEqual(
-            self.device.last_seen,
-            received_at,
-        )
+        self.assertEqual(self.device.last_seen, received_at)
 
         # The heartbeat must be stored.
-        self.assertEqual(
-            DeviceHeartbeat.objects.filter(
-                device=self.device,
-            ).count(),
-            1,
-        )
+        self.assertEqual(DeviceHeartbeat.objects.filter(device=self.device).count(), 1)
 
         # A health alert must be created.
         alert = DeviceAlert.objects.get(
-            device=self.device,
-            alert_type=AlertType.DEVICE_HEALTH,
-            active=True,
+            device=self.device, alert_type=AlertType.DEVICE_HEALTH, active=True
         )
 
-        self.assertEqual(
-            alert.severity,
-            AlertSeverity.WARNING,
-        )
+        self.assertEqual(alert.severity, AlertSeverity.WARNING)
 
         # The alert should identify the unhealthy component.
-        self.assertIn(
-            "detector",
-            alert.message,
-        )
+        self.assertIn("detector", alert.message)
 
         # The original MQTT payload should be preserved.
-        self.assertEqual(
-            alert.raw_payload,
-            payload,
-        )
+        self.assertEqual(alert.raw_payload, payload)
 
     # Test 3
 
@@ -529,16 +405,11 @@ class DeviceHealthServiceTests(TestCase):
 
         unhealthy_payload["components"]["detector"]["status"] = "down"
 
-        process_device_health(
-            device=self.device,
-            payload=unhealthy_payload,
-        )
+        process_device_health(device=self.device, payload=unhealthy_payload)
 
         # Verify that the alert was created.
         alert = DeviceAlert.objects.get(
-            device=self.device,
-            alert_type=AlertType.DEVICE_HEALTH,
-            active=True,
+            device=self.device, alert_type=AlertType.DEVICE_HEALTH, active=True
         )
 
         self.assertTrue(alert.active)
@@ -550,18 +421,12 @@ class DeviceHealthServiceTests(TestCase):
 
         healthy_payload = self.healthy_payload()
 
-        process_device_health(
-            device=self.device,
-            payload=healthy_payload,
-        )
+        process_device_health(device=self.device, payload=healthy_payload)
 
         self.device.refresh_from_db()
 
         # Device remains ONLINE.
-        self.assertEqual(
-            self.device.status,
-            DeviceStatus.ONLINE,
-        )
+        self.assertEqual(self.device.status, DeviceStatus.ONLINE)
 
         # The previous alert should now be resolved.
         alert.refresh_from_db()
@@ -576,8 +441,7 @@ class DeviceHealthServiceTests(TestCase):
         # another alert for the recovery.
         self.assertEqual(
             DeviceAlert.objects.filter(
-                device=self.device,
-                alert_type=AlertType.DEVICE_HEALTH,
+                device=self.device, alert_type=AlertType.DEVICE_HEALTH
             ).count(),
             1,
         )
@@ -594,20 +458,11 @@ class HeartbeatTimeoutTests(TestCase):
         Create the hierarchy required by Device.
         """
 
-        cls.country = Country.objects.create(
-            name="Portugal",
-            code="PT",
-        )
+        cls.country = Country.objects.create(name="Portugal", code="PT")
 
-        cls.customer = Customer.objects.create(
-            country=cls.country,
-            name="aitecserv",
-        )
+        cls.customer = Customer.objects.create(country=cls.country, name="aitecserv")
 
-        cls.location = Location.objects.create(
-            customer=cls.customer,
-            name="office2",
-        )
+        cls.location = Location.objects.create(customer=cls.customer, name="office2")
 
         cls.device = Device.objects.create(
             location=cls.location,
@@ -632,24 +487,15 @@ class HeartbeatTimeoutTests(TestCase):
 
         self.device.save(update_fields=["last_seen"])
 
-        check_device_timeout(
-            device=self.device,
-            timeout_seconds=60,
-            now=now,
-        )
+        check_device_timeout(device=self.device, timeout_seconds=60, now=now)
 
         self.device.refresh_from_db()
 
-        self.assertEqual(
-            self.device.status,
-            DeviceStatus.ONLINE,
-        )
+        self.assertEqual(self.device.status, DeviceStatus.ONLINE)
 
         self.assertFalse(
             DeviceAlert.objects.filter(
-                device=self.device,
-                alert_type=AlertType.DEVICE_OFFLINE,
-                active=True,
+                device=self.device, alert_type=AlertType.DEVICE_OFFLINE, active=True
             ).exists()
         )
 
@@ -666,36 +512,21 @@ class HeartbeatTimeoutTests(TestCase):
 
         self.device.save(update_fields=["last_seen"])
 
-        check_device_timeout(
-            device=self.device,
-            timeout_seconds=60,
-            now=now,
-        )
+        check_device_timeout(device=self.device, timeout_seconds=60, now=now)
 
         self.device.refresh_from_db()
 
         # Device should now be offline.
-        self.assertEqual(
-            self.device.status,
-            DeviceStatus.OFFLINE,
-        )
+        self.assertEqual(self.device.status, DeviceStatus.OFFLINE)
 
         # An offline alert should exist.
         alert = DeviceAlert.objects.get(
-            device=self.device,
-            alert_type=AlertType.DEVICE_OFFLINE,
-            active=True,
+            device=self.device, alert_type=AlertType.DEVICE_OFFLINE, active=True
         )
 
-        self.assertEqual(
-            alert.severity,
-            AlertSeverity.CRITICAL,
-        )
+        self.assertEqual(alert.severity, AlertSeverity.CRITICAL)
 
-        self.assertIn(
-            "offline",
-            alert.message.lower(),
-        )
+        self.assertIn("offline", alert.message.lower())
 
     # Offline alert is not duplicated
 
@@ -712,29 +543,16 @@ class HeartbeatTimeoutTests(TestCase):
         self.device.save(update_fields=["last_seen"])
 
         # First timeout check.
-        check_device_timeout(
-            device=self.device,
-            timeout_seconds=60,
-            now=now,
-        )
+        check_device_timeout(device=self.device, timeout_seconds=60, now=now)
 
         # Second timeout check.
-        check_device_timeout(
-            device=self.device,
-            timeout_seconds=60,
-            now=now,
-        )
+        check_device_timeout(device=self.device, timeout_seconds=60, now=now)
 
         active_alerts = DeviceAlert.objects.filter(
-            device=self.device,
-            alert_type=AlertType.DEVICE_OFFLINE,
-            active=True,
+            device=self.device, alert_type=AlertType.DEVICE_OFFLINE, active=True
         )
 
-        self.assertEqual(
-            active_alerts.count(),
-            1,
-        )
+        self.assertEqual(active_alerts.count(), 1)
 
     # Never-seen device remains UNKNOWN
 
@@ -748,29 +566,16 @@ class HeartbeatTimeoutTests(TestCase):
         self.device.status = DeviceStatus.UNKNOWN
         self.device.last_seen = None
 
-        self.device.save(
-            update_fields=[
-                "status",
-                "last_seen",
-            ]
-        )
+        self.device.save(update_fields=["status", "last_seen"])
 
-        check_device_timeout(
-            device=self.device,
-            timeout_seconds=60,
-        )
+        check_device_timeout(device=self.device, timeout_seconds=60)
 
         self.device.refresh_from_db()
 
-        self.assertEqual(
-            self.device.status,
-            DeviceStatus.UNKNOWN,
-        )
+        self.assertEqual(self.device.status, DeviceStatus.UNKNOWN)
 
         self.assertFalse(
             DeviceAlert.objects.filter(
-                device=self.device,
-                alert_type=AlertType.DEVICE_OFFLINE,
-                active=True,
+                device=self.device, alert_type=AlertType.DEVICE_OFFLINE, active=True
             ).exists()
         )

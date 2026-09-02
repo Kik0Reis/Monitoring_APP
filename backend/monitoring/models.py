@@ -5,72 +5,31 @@ from devices.models import Device, DeviceStatus
 
 class DeviceHeartbeat(models.Model):
     """
-    Stores heartbeat/health information received from a device through MQTT.
+    One heartbeat/health message received from a device over MQTT.
 
-    A heartbeat represents a single message received from a device.
-
-    The Device model stores the current state, while this model keeps the
-    historical heartbeat information.
+    The Device model always holds the current state; this table is the
+    history of every message that led up to it.
     """
 
-    device = models.ForeignKey(
-        Device,
-        on_delete=models.CASCADE,
-        related_name="heartbeats",
-    )
+    device = models.ForeignKey(Device, on_delete=models.CASCADE, related_name="heartbeats")
 
-    # When the MQTT message was received by our backend.
-    received_at = models.DateTimeField(
-        auto_now_add=True,
-        db_index=True,
-    )
+    # When our backend received the MQTT message.
+    received_at = models.DateTimeField(auto_now_add=True, db_index=True)
 
-    # Timestamp provided by the device inside the MQTT payload.
-    # This can be different from received_at.
-    timestamp = models.DateTimeField(
-        null=True,
-        blank=True,
-    )
+    # Timestamp the device itself put in the payload — can differ from
+    # received_at if the device's clock is off or the message was delayed.
+    timestamp = models.DateTimeField(null=True, blank=True)
 
-    # CPU usage reported by the device, when available.
-    cpu = models.FloatField(
-        null=True,
-        blank=True,
-    )
+    cpu = models.FloatField(null=True, blank=True)
+    memory = models.FloatField(null=True, blank=True)
+    storage = models.FloatField(null=True, blank=True)
+    temperature = models.FloatField(null=True, blank=True)
 
-    # Memory usage reported by the device, when available.
-    memory = models.FloatField(
-        null=True,
-        blank=True,
-    )
-
-    # Storage usage reported by the device, when available.
-    storage = models.FloatField(
-        null=True,
-        blank=True,
-    )
-
-    # Temperature reported by the device, when available.
-    temperature = models.FloatField(
-        null=True,
-        blank=True,
-    )
-
-    # Stores the complete original MQTT payload.
-    #
-    # This is particularly useful because the current health payload
-    # contains nested component information such as:
-    #
-    # aiaction_edge
-    # detector
-    # idmr
-    # requests
-    #
-    # We don't need to create separate database fields for all of these
-    # until we know exactly which values the dashboard needs.
-    raw_payload = models.JSONField(
-        default=dict,
-    )
+    # The full MQTT payload, kept as-is. Health messages carry nested
+    # per-component info (aiaction_edge, detector, idmr, requests, ...)
+    # that isn't worth its own column until we know what the dashboard
+    # actually needs from it.
+    raw_payload = models.JSONField(default=dict)
 
     class Meta:
         ordering = ["-received_at"]
@@ -83,37 +42,18 @@ class DeviceHeartbeat(models.Model):
 
 class DeviceStatusHistory(models.Model):
     """
-    Stores changes to a device's current status.
-
-    The Device model contains the current status.
-
-    This model contains the historical transitions, for example:
-
-        UNKNOWN -> ONLINE
-        ONLINE -> OFFLINE
-        OFFLINE -> ONLINE
+    A log of a device's status transitions (UNKNOWN -> ONLINE -> OFFLINE,
+    etc). The Device model only holds the current status — this is what
+    lets you see when and how often it's been flapping.
     """
 
     device = models.ForeignKey(
-        Device,
-        on_delete=models.CASCADE,
-        related_name="status_history",
+        Device, on_delete=models.CASCADE, related_name="status_history"
     )
 
-    old_status = models.CharField(
-        max_length=10,
-        choices=DeviceStatus.choices,
-    )
-
-    new_status = models.CharField(
-        max_length=10,
-        choices=DeviceStatus.choices,
-    )
-
-    changed_at = models.DateTimeField(
-        auto_now_add=True,
-        db_index=True,
-    )
+    old_status = models.CharField(max_length=10, choices=DeviceStatus.choices)
+    new_status = models.CharField(max_length=10, choices=DeviceStatus.choices)
+    changed_at = models.DateTimeField(auto_now_add=True, db_index=True)
 
     class Meta:
         ordering = ["-changed_at"]
@@ -121,13 +61,11 @@ class DeviceStatusHistory(models.Model):
         verbose_name_plural = "Device Status Histories"
 
     def __str__(self):
-        return f"{self.device.name}: " f"{self.old_status} -> {self.new_status}"
+        return f"{self.device.name}: {self.old_status} -> {self.new_status}"
 
 
 class AlertSeverity(models.TextChoices):
-    """
-    Severity levels for dashboard alerts.
-    """
+    """How urgent an alert is, for sorting/coloring it on the dashboard."""
 
     INFO = "INFO", "Info"
     WARNING = "WARNING", "Warning"
@@ -135,9 +73,7 @@ class AlertSeverity(models.TextChoices):
 
 
 class AlertType(models.TextChoices):
-    """
-    Types of alerts that can be generated by the monitoring system.
-    """
+    """The kinds of problem a DeviceAlert can represent."""
 
     DEVICE_OFFLINE = "DEVICE_OFFLINE", "Device Offline"
     DEVICE_HEALTH = "DEVICE_HEALTH", "Device Health"
@@ -148,59 +84,31 @@ class AlertType(models.TextChoices):
 
 class DeviceAlert(models.Model):
     """
-    Represents an alert generated by the monitoring system.
-
-    Alerts are generated by monitoring logic, not directly by the
-    MQTT parser.
-
-    Examples:
-
-        Device stopped sending heartbeats.
-        Device reported an unhealthy component.
-        Device reported an error.
-        MQTT communication problem.
+    A problem raised by the monitoring logic for an Edge device — e.g. it
+    stopped sending heartbeats, reported an unhealthy component, or hit
+    an MQTT error. Alerts are created by the monitoring services, never
+    directly by the MQTT parser.
     """
 
-    device = models.ForeignKey(
-        Device,
-        on_delete=models.CASCADE,
-        related_name="alerts",
-    )
+    device = models.ForeignKey(Device, on_delete=models.CASCADE, related_name="alerts")
 
-    alert_type = models.CharField(
-        max_length=30,
-        choices=AlertType.choices,
-    )
+    alert_type = models.CharField(max_length=30, choices=AlertType.choices)
 
     severity = models.CharField(
-        max_length=10,
-        choices=AlertSeverity.choices,
-        default=AlertSeverity.WARNING,
+        max_length=10, choices=AlertSeverity.choices, default=AlertSeverity.WARNING
     )
 
     message = models.TextField()
 
-    # True while the alert still requires attention.
-    active = models.BooleanField(
-        default=True,
-        db_index=True,
-    )
+    # Stays True until whatever caused the alert is resolved.
+    active = models.BooleanField(default=True, db_index=True)
 
-    created_at = models.DateTimeField(
-        auto_now_add=True,
-        db_index=True,
-    )
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
 
-    resolved_at = models.DateTimeField(
-        null=True,
-        blank=True,
-    )
-
-    # Optional reference to the MQTT payload that caused the alert.
-    raw_payload = models.JSONField(
-        default=dict,
-        blank=True,
-    )
+    # The MQTT payload that triggered this, if there was one — handy for
+    # debugging without having to dig through logs.
+    raw_payload = models.JSONField(default=dict, blank=True)
 
     class Meta:
         ordering = ["-created_at"]
@@ -208,7 +116,7 @@ class DeviceAlert(models.Model):
         verbose_name_plural = "Device Alerts"
 
     def __str__(self):
-        return f"{self.device.name} - " f"{self.alert_type} - " f"{self.severity}"
+        return f"{self.device.name} - {self.alert_type} - {self.severity}"
 
 
 class CameraAlertType(models.TextChoices):
@@ -219,50 +127,26 @@ class CameraAlertType(models.TextChoices):
 
 class CameraAlert(models.Model):
     """
-    Represents an alert generated by a camera.
-
-    Camera alerts are separate from Edge/device alerts because
-    one Edge device can contain multiple cameras.
+    A problem or detection reported by a single camera. Kept separate
+    from DeviceAlert because one Edge device can have several cameras,
+    each with its own alert history.
     """
 
     camera = models.ForeignKey(
-        "cameras.Camera",
-        on_delete=models.CASCADE,
-        related_name="alerts",
+        "cameras.Camera", on_delete=models.CASCADE, related_name="alerts"
     )
 
-    alert_type = models.CharField(
-        max_length=30,
-        choices=CameraAlertType.choices,
-    )
+    alert_type = models.CharField(max_length=30, choices=CameraAlertType.choices)
 
     severity = models.CharField(
-        max_length=10,
-        choices=AlertSeverity.choices,
-        default=AlertSeverity.WARNING,
+        max_length=10, choices=AlertSeverity.choices, default=AlertSeverity.WARNING
     )
 
     message = models.TextField()
-
-    active = models.BooleanField(
-        default=True,
-        db_index=True,
-    )
-
-    created_at = models.DateTimeField(
-        auto_now_add=True,
-        db_index=True,
-    )
-
-    resolved_at = models.DateTimeField(
-        null=True,
-        blank=True,
-    )
-
-    raw_payload = models.JSONField(
-        default=dict,
-        blank=True,
-    )
+    active = models.BooleanField(default=True, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+    raw_payload = models.JSONField(default=dict, blank=True)
 
     class Meta:
         ordering = ["-created_at"]
@@ -270,4 +154,4 @@ class CameraAlert(models.Model):
         verbose_name_plural = "Camera Alerts"
 
     def __str__(self):
-        return f"{self.camera.name} - " f"{self.alert_type} - " f"{self.severity}"
+        return f"{self.camera.name} - {self.alert_type} - {self.severity}"
