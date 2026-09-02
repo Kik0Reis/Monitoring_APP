@@ -47,14 +47,15 @@ def get_problem_alerts(limit=10, active_only=True):
     Return device/camera health & connectivity problems, newest first.
 
     Includes: DeviceAlert (all types) and CameraAlert of type
-    CAMERA_ERROR. Does NOT include CameraAlert of type CAMERA_ALERT
-    (those are real-world detections, see get_camera_detections below).
+    CAMERA_ERROR or CAMERA_OFFLINE. Does NOT include CameraAlert of type
+    CAMERA_ALERT (those are real-world detections, see
+    get_camera_detections below).
     """
 
     device_alerts = DeviceAlert.objects.select_related("device", "device__location")
 
-    camera_error_alerts = CameraAlert.objects.filter(
-        alert_type=CameraAlertType.CAMERA_ERROR
+    camera_problem_alerts = CameraAlert.objects.filter(
+        alert_type__in=[CameraAlertType.CAMERA_ERROR, CameraAlertType.CAMERA_OFFLINE]
     ).select_related(
         "camera",
         "camera__device",
@@ -63,13 +64,13 @@ def get_problem_alerts(limit=10, active_only=True):
 
     if active_only:
         device_alerts = device_alerts.filter(active=True)
-        camera_error_alerts = camera_error_alerts.filter(active=True)
+        camera_problem_alerts = camera_problem_alerts.filter(active=True)
 
     device_alerts = device_alerts.order_by("-created_at")[:limit]
-    camera_error_alerts = camera_error_alerts.order_by("-created_at")[:limit]
+    camera_problem_alerts = camera_problem_alerts.order_by("-created_at")[:limit]
 
     alerts = _serialize_device_alerts(device_alerts)
-    alerts += _serialize_camera_alerts(camera_error_alerts)
+    alerts += _serialize_camera_alerts(camera_problem_alerts)
 
     alerts.sort(key=lambda alert: alert["created_at"], reverse=True)
     alerts = alerts[:limit]
@@ -145,6 +146,7 @@ def _serialize_camera_alerts(camera_alerts):
     alert_type_labels = {
         "CAMERA_ALERT": "Camera",
         "CAMERA_ERROR": "Camera Error",
+        "CAMERA_OFFLINE": "Camera Offline",
     }
 
     alerts = []
@@ -289,6 +291,10 @@ def get_locations_with_problems(limit=10):
     - an active device alert
     - an offline or unknown camera
     - an active camera alert
+
+    Each result includes an "issues" list of short, human-readable
+    descriptions (e.g. "2 device(s) offline", "1 camera offline") so the
+    dashboard can show *what's* wrong at a glance, not just a count.
     """
 
     locations = (
@@ -362,6 +368,23 @@ def get_locations_with_problems(limit=10):
             else "UNKNOWN" if location.unknown_devices > 0 else "WARNING"
         )
 
+        issues = []
+
+        if location.offline_devices > 0:
+            issues.append(f"{location.offline_devices} device(s) offline")
+
+        if location.unknown_devices > 0:
+            issues.append(f"{location.unknown_devices} device(s) with unknown status")
+
+        if location.offline_cameras > 0:
+            issues.append(f"{location.offline_cameras} camera(s) offline")
+
+        if location.active_device_alerts > 0:
+            issues.append(f"{location.active_device_alerts} active device alert(s)")
+
+        if location.active_camera_alerts > 0:
+            issues.append(f"{location.active_camera_alerts} active camera alert(s)")
+
         result.append(
             {
                 "id": location.id,
@@ -373,6 +396,7 @@ def get_locations_with_problems(limit=10):
                 "offline_cameras": location.offline_cameras,
                 "active_camera_alerts": location.active_camera_alerts,
                 "problem_count": problem_count,
+                "issues": issues,
             }
         )
 
@@ -401,4 +425,8 @@ def get_dashboard_data():
         "recent_problems": get_problem_alerts(limit=10, active_only=True),
         "devices_with_problems": get_devices_with_problems(),
         "locations_with_problems": get_locations_with_problems(),
+        # Real-world events cameras have reported (smoke, person, etc).
+        # Unlike problems these don't resolve — every detection stays in
+        # the log — so this is just "the most recent ones".
+        "recent_detections": get_camera_detections(limit=10),
     }

@@ -39,7 +39,45 @@ def update_camera_status(
         ]
     )
 
+    # Keep the "camera offline" alert in sync with the status we just set,
+    # no matter which code path got us here (a timeout sweep, an explicit
+    # "offline" in a bulk camera-status message, or a fresh detection
+    # proving the camera is back).
+    if new_status == CameraStatus.OFFLINE:
+        create_camera_offline_alert(camera)
+    elif new_status == CameraStatus.ONLINE:
+        resolve_camera_offline_alerts(camera)
+
     return camera
+
+
+def create_camera_offline_alert(camera: Camera) -> CameraAlert:
+    existing_alert = CameraAlert.objects.filter(
+        camera=camera,
+        alert_type=CameraAlertType.CAMERA_OFFLINE,
+        active=True,
+    ).first()
+
+    if existing_alert:
+        return existing_alert
+
+    return CameraAlert.objects.create(
+        camera=camera,
+        alert_type=CameraAlertType.CAMERA_OFFLINE,
+        severity=AlertSeverity.CRITICAL,
+        message=f"Camera '{camera.name}' is offline.",
+    )
+
+
+def resolve_camera_offline_alerts(camera: Camera) -> int:
+    return CameraAlert.objects.filter(
+        camera=camera,
+        alert_type=CameraAlertType.CAMERA_OFFLINE,
+        active=True,
+    ).update(
+        active=False,
+        resolved_at=timezone.now(),
+    )
 
 
 def get_camera(

@@ -214,6 +214,7 @@ class DeviceAlert(models.Model):
 class CameraAlertType(models.TextChoices):
     CAMERA_ALERT = "CAMERA_ALERT", "Camera Alert"
     CAMERA_ERROR = "CAMERA_ERROR", "Camera Error"
+    CAMERA_OFFLINE = "CAMERA_OFFLINE", "Camera Offline"
 
 
 class CameraAlert(models.Model):

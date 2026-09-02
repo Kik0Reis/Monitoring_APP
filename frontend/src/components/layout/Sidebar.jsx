@@ -1,35 +1,23 @@
 import { NavLink } from "react-router-dom";
+import {
+  LayoutDashboard,
+  Globe,
+  Users,
+  MapPin,
+  Cpu,
+  Camera,
+  Bell,
+} from "lucide-react";
 
 function Sidebar() {
   const navigation = [
-    {
-      label: "Dashboard",
-      path: "/dashboard",
-    },
-    {
-      label: "Countries",
-      path: "/countries",
-    },
-    {
-      label: "Clients",
-      path: "/clients",
-    },
-    {
-      label: "Locations",
-      path: "/locations",
-    },
-    {
-      label: "Devices",
-      path: "/devices",
-    },
-    {
-      label: "Cameras",
-      path: "/cameras",
-    },
-    {
-      label: "Alerts",
-      path: "/alerts",
-    },
+    { label: "Dashboard", path: "/dashboard", icon: LayoutDashboard },
+    { label: "Countries", path: "/countries", icon: Globe },
+    { label: "Clients", path: "/clients", icon: Users },
+    { label: "Locations", path: "/locations", icon: MapPin },
+    { label: "Devices", path: "/devices", icon: Cpu },
+    { label: "Cameras", path: "/cameras", icon: Camera },
+    { label: "Alerts", path: "/alerts", icon: Bell },
   ];
 
   return (
@@ -47,7 +35,7 @@ function Sidebar() {
               `sidebar-link ${isActive ? "active" : ""}`
             }
           >
-            <span className="sidebar-link-icon" />
+            <item.icon className="sidebar-link-icon" size={18} strokeWidth={2} />
             <span>{item.label}</span>
           </NavLink>
         ))}

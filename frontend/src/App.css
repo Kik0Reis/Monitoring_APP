@@ -92,10 +92,13 @@
 }
 
 .sidebar-link-icon {
-  width: 16px;
-  height: 16px;
-  border: 1px solid currentColor;
-  border-radius: 4px;
-  opacity: 0.8;
-  flex: 0 0 16px;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  opacity: 0.85;
+}
+
+.sidebar-link:hover .sidebar-link-icon,
+.sidebar-link.active .sidebar-link-icon {
+  opacity: 1;
 }

@@ -18,6 +18,7 @@ function formatAlertType(type) {
     SYSTEM_ERROR: "System",
     CAMERA_ALERT: "Camera",
     CAMERA_ERROR: "Camera Error",
+    CAMERA_OFFLINE: "Camera Offline",
   };
 
   return labels[type] ?? type ?? "Alert";
@@ -100,6 +101,7 @@ function Dashboard() {
   const recentProblems = dashboard?.recent_problems ?? [];
   const devicesWithProblems = dashboard?.devices_with_problems ?? [];
   const locationsWithProblems = dashboard?.locations_with_problems ?? [];
+  const recentDetections = dashboard?.recent_detections ?? [];
 
   const summaryCards = [
     { label: "Devices", value: summary.devices ?? 0, description: "Total devices" },
@@ -227,7 +229,7 @@ function Dashboard() {
               <div className="dashboard-empty">No locations with problems.</div>
             ) : (
               locationsWithProblems.map((location) => {
-                const problemCount = location.problem_count ?? 0;
+                const issues = location.issues ?? [];
 
                 return (
                   <button
@@ -241,12 +243,55 @@ function Dashboard() {
                       <strong>{location.name}</strong>
                     </div>
 
-                    <span>
-                      {problemCount} {problemCount === 1 ? "problem" : "problems"}
-                    </span>
+                    <span>{issues.join(", ") || "Needs attention"}</span>
                   </button>
                 );
               })
+            )}
+          </div>
+        </article>
+
+        {/* Detections: real events reported by cameras (smoke, person,
+            etc), not "currently broken" problems — so no severity dot,
+            just a chronological feed. */}
+        <article className="dashboard-panel">
+          <div className="panel-header">
+            <div>
+              <p className="panel-eyebrow">Cameras</p>
+              <h2>Recent Detections</h2>
+            </div>
+            <button type="button" className="text-button" onClick={() => navigate("/alerts")}>
+              See All
+            </button>
+          </div>
+
+          <div className="alert-list">
+            {recentDetections.length === 0 ? (
+              <div className="dashboard-empty">No detections yet.</div>
+            ) : (
+              recentDetections.map((detection) => (
+                <button
+                  type="button"
+                  className="alert-row"
+                  key={detection.id}
+                  onClick={() => handleAlertClick(detection)}
+                >
+                  <div className="alert-row-main">
+                    <StatusDot status="info" />
+                    <div>
+                      <strong>{detection.message}</strong>
+                      <span>
+                        {detection.camera_name}
+                        {detection.location_name ? ` · ${detection.location_name}` : ""}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="alert-row-meta">
+                    <time>{formatTime(detection.created_at)}</time>
+                  </div>
+                </button>
+              ))
             )}
           </div>
         </article>
