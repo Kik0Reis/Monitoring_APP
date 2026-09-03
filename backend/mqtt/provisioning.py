@@ -60,10 +60,7 @@ def _resolve_by_mqtt_key(model, mqtt_key, lookup, name_field, defaults):
 
     try:
         with transaction.atomic():
-            return (
-                model.objects.create(mqtt_key=mqtt_key, **lookup, **defaults),
-                True,
-            )
+            return (model.objects.create(mqtt_key=mqtt_key, **lookup, **defaults), True)
     except IntegrityError:
         # Lost a race with another request that created the same record
         # in between our checks above and our insert — just use theirs.
@@ -71,11 +68,7 @@ def _resolve_by_mqtt_key(model, mqtt_key, lookup, name_field, defaults):
 
 
 def resolve_device(
-    *,
-    country_code: str,
-    client_key: str,
-    installation_key: str,
-    device_id: str,
+    *, country_code: str, client_key: str, installation_key: str, device_id: str
 ) -> Device | None:
     """
     Resolve the Device for an incoming MQTT message, auto-creating any
@@ -110,18 +103,11 @@ def _resolve_country(country_code: str) -> Country:
     code = country_code.strip().upper()[:2]
 
     country, created = Country.objects.get_or_create(
-        code=code,
-        defaults={
-            "name": f"Unverified ({code})",
-            "pending_review": True,
-        },
+        code=code, defaults={"name": f"Unverified ({code})", "pending_review": True}
     )
 
     if created:
-        logger.warning(
-            "Auto-created Country from MQTT: code=%s (pending review)",
-            code,
-        )
+        logger.warning("Auto-created Country from MQTT: code=%s (pending review)", code)
 
     return country
 
@@ -205,10 +191,7 @@ def _resolve_device(location: Location, device_id: str) -> Device:
 
 
 def resolve_camera(
-    device: Device,
-    camera_identifier: str,
-    name: str | None = None,
-    channel: int = 1,
+    device: Device, camera_identifier: str, name: str | None = None, channel: int = 1
 ) -> Camera:
     """
     Resolve the Camera for an entry in a device's ".../cameras" status

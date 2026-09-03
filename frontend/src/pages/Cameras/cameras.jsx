@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { Check, Eye, Pencil, Trash2 } from "lucide-react";
 
 import { camerasApi, devicesApi, fetchAll } from "../../services/api";
 import { useCrudResource } from "../../hooks/useCrudResource";
@@ -177,7 +178,7 @@ function Cameras() {
                 title="Approve"
                 onClick={() => handleApprove(camera)}
               >
-                ✓
+                <Check size={16} />
               </button>
             )}
             <button
@@ -185,21 +186,21 @@ function Cameras() {
               aria-label={`View ${camera.name}`}
               onClick={() => resource.openView(camera)}
             >
-              👁
+              <Eye size={16} />
             </button>
             <button
               className="icon-button"
               aria-label={`Edit ${camera.name}`}
               onClick={() => resource.openEdit(camera)}
             >
-              ✎
+              <Pencil size={16} />
             </button>
             <button
               className="icon-button danger"
               aria-label={`Delete ${camera.name}`}
               onClick={() => resource.handleDelete(camera)}
             >
-              🗑
+              <Trash2 size={16} />
             </button>
           </>
         )}

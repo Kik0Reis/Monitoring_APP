@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { Check, Pencil, Trash2 } from "lucide-react";
 
 import { customersApi, locationsApi } from "../../services/api";
 import { useCrudResource } from "../../hooks/useCrudResource";
@@ -182,17 +183,17 @@ function CustomerDetail() {
                   title="Approve"
                   onClick={() => handleApproveLocation(location)}
                 >
-                  ✓
+                  <Check size={16} />
                 </button>
               )}
               <button className="icon-button" onClick={() => locations.openEdit(location)}>
-                ✎
+                <Pencil size={16} />
               </button>
               <button
                 className="icon-button danger"
                 onClick={() => locations.handleDelete(location)}
               >
-                🗑
+                <Trash2 size={16} />
               </button>
             </>
           )}

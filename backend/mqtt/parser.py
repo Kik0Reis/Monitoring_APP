@@ -1,18 +1,10 @@
 """
 MQTT topic and payload parser.
 
-This module is responsible ONLY for understanding MQTT messages.
-
-It does not:
-
-- access the database
-- update devices
-- create alerts
-- connect to MQTT
-- contain monitoring business logic
-
-The parser converts a raw MQTT topic + payload into a structured
-Python dictionary that can be passed to the MQTT service layer.
+This module only understands the shape of MQTT messages — it doesn't
+touch the database, update devices, create alerts, or connect to MQTT.
+It turns a raw topic + payload into a plain dict that mqtt/service.py
+knows what to do with.
 """
 
 import json
@@ -20,33 +12,21 @@ from typing import Any
 
 
 class MQTTParserError(Exception):
-    """
-    Raised when an MQTT topic or payload cannot be parsed.
-    """
-
-    pass
+    """Raised when an MQTT topic or payload doesn't match what we expect."""
 
 
 def parse_topic(topic: str) -> dict[str, Any]:
     """
-    Parse an AiAction MQTT topic.
+    Parse an AiAction MQTT topic into its component parts.
 
-    Supported topics:
+    Supported shapes:
 
         aiaction/{country}/{client}/{installation}/{device_id}/status/{source}
-
         aiaction/{country}/{client}/{installation}/{device_id}/health
-
         aiaction/{country}/{client}/{installation}/{device_id}/cameras
-
-        aiaction/{country}/{client}/{installation}/{device_id}/
-        {camera_id}/ch{channel}/alert
-
-        aiaction/{country}/{client}/{installation}/{device_id}/
-        {camera_id}/ch{channel}/event/{action_code}
-
-        aiaction/{country}/{client}/{installation}/{device_id}/
-        {camera_id}/ch{channel}/error
+        aiaction/.../{device_id}/{camera_id}/ch{channel}/alert
+        aiaction/.../{device_id}/{camera_id}/ch{channel}/event/{action_code}
+        aiaction/.../{device_id}/{camera_id}/ch{channel}/error
     """
 
     if not isinstance(topic, str) or not topic.strip():
@@ -56,7 +36,7 @@ def parse_topic(topic: str) -> dict[str, Any]:
 
     if not parts or parts[0] != "aiaction":
         raise MQTTParserError(
-            f"Unsupported MQTT topic namespace: " f"{parts[0] if parts else ''}"
+            f"Unsupported MQTT topic namespace: {parts[0] if parts else ''}"
         )
 
     if len(parts) < 6:
@@ -79,12 +59,8 @@ def parse_topic(topic: str) -> dict[str, Any]:
     if not device_id:
         raise MQTTParserError("MQTT topic device_id cannot be empty.")
 
-        # Device status
-    #
-    # aiaction/.../{device_id}/status/{source}
-
+    # Device status: aiaction/.../{device_id}/status/{source}
     if len(parts) == 7 and parts[5] == "status":
-
         source = parts[6]
 
         if not source:
@@ -99,12 +75,8 @@ def parse_topic(topic: str) -> dict[str, Any]:
             "source": source,
         }
 
-        # Device health
-    #
-    # aiaction/.../{device_id}/health
-
+    # Device health: aiaction/.../{device_id}/health
     if len(parts) == 6 and parts[5] == "health":
-
         return {
             "message_type": "health",
             "country": country,
@@ -113,12 +85,8 @@ def parse_topic(topic: str) -> dict[str, Any]:
             "device_id": device_id,
         }
 
-        # Camera status list
-    #
-    # aiaction/.../{device_id}/cameras
-
+    # Bulk camera status list: aiaction/.../{device_id}/cameras
     if len(parts) == 6 and parts[5] == "cameras":
-
         return {
             "message_type": "cameras",
             "country": country,
@@ -127,8 +95,8 @@ def parse_topic(topic: str) -> dict[str, Any]:
             "device_id": device_id,
         }
 
-        # Camera-level topics
-
+    # Everything left targets a specific camera, so it needs a camera_id
+    # and a "ch{n}" channel segment.
     if len(parts) < 8:
         raise MQTTParserError(f"Invalid camera MQTT topic: {topic}")
 
@@ -148,10 +116,7 @@ def parse_topic(topic: str) -> dict[str, Any]:
 
     channel_number = int(channel_number)
 
-    # Alert
-
     if len(parts) == 8 and parts[7] == "alert":
-
         return {
             "message_type": "alert",
             "country": country,
@@ -162,10 +127,7 @@ def parse_topic(topic: str) -> dict[str, Any]:
             "channel": channel_number,
         }
 
-        # Error
-
     if len(parts) == 8 and parts[7] == "error":
-
         return {
             "message_type": "error",
             "country": country,
@@ -176,10 +138,7 @@ def parse_topic(topic: str) -> dict[str, Any]:
             "channel": channel_number,
         }
 
-        # Event
-
     if len(parts) == 9 and parts[7] == "event":
-
         action_code = parts[8]
 
         if not action_code:
@@ -199,18 +158,15 @@ def parse_topic(topic: str) -> dict[str, Any]:
     raise MQTTParserError(f"Unsupported MQTT topic structure: {topic}")
 
 
-def parse_payload(
-    payload: bytes | str | dict,
-) -> dict[str, Any]:
+def parse_payload(payload: bytes | str | dict) -> dict[str, Any]:
+    """Decode an MQTT payload (bytes, JSON string, or already a dict) to a dict."""
 
     if isinstance(payload, dict):
         return payload
 
     if isinstance(payload, bytes):
-
         try:
             payload = payload.decode("utf-8")
-
         except UnicodeDecodeError as exc:
             raise MQTTParserError("MQTT payload is not valid UTF-8.") from exc
 
@@ -219,7 +175,6 @@ def parse_payload(
 
     try:
         data = json.loads(payload)
-
     except json.JSONDecodeError as exc:
         raise MQTTParserError("MQTT payload is not valid JSON.") from exc
 
@@ -229,18 +184,18 @@ def parse_payload(
     return data
 
 
-def parse_mqtt_message(
-    topic: str,
-    payload: bytes | str | dict,
-) -> dict[str, Any]:
+def parse_mqtt_message(topic: str, payload: bytes | str | dict) -> dict[str, Any]:
+    """
+    Parse a raw MQTT topic + payload into one dict the service layer can
+    use directly — topic fields merged with the payload, plus every
+    optional field (camera_id, channel, source, action_code) defaulted to
+    None so callers never have to guess whether a key is present.
+    """
 
     parsed_topic = parse_topic(topic)
     parsed_payload = parse_payload(payload)
 
-    parsed_message = {
-        **parsed_topic,
-        "payload": parsed_payload,
-    }
+    parsed_message = {**parsed_topic, "payload": parsed_payload}
 
     parsed_message.setdefault("camera_id", None)
     parsed_message.setdefault("channel", None)

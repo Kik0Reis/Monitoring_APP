@@ -52,16 +52,19 @@
   border: 0;
   border-radius: var(--radius-sm);
   padding: 9px 16px;
-  background: var(--color-ink);
+  background: var(--color-brand);
   color: white;
   font: inherit;
   font-size: var(--text-base);
   font-weight: var(--weight-semibold);
   white-space: nowrap;
+  box-shadow: 0 0 0 0 transparent;
+  transition: background 0.15s ease, box-shadow 0.15s ease;
 }
 
 .primary-button:hover:not(:disabled) {
-  background: #33384a;
+  background: var(--color-brand-strong);
+  box-shadow: 0 4px 18px var(--button-glow);
 }
 
 .primary-button:disabled {
@@ -98,11 +101,14 @@
   background: transparent;
   border: 0;
   cursor: pointer;
-  font-size: var(--text-lg);
   line-height: 1;
   color: var(--color-ink-soft);
   padding: 4px 6px;
   border-radius: var(--radius-sm);
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .icon-button:hover {
@@ -174,6 +180,7 @@
 .search-bar input:focus {
   outline: none;
   border-color: var(--color-brand-strong);
+  box-shadow: 0 0 0 3px rgba(99, 56, 246, 0.18);
 }
 
 .search-caret {
@@ -451,6 +458,7 @@
 .form-field textarea:focus {
   outline: none;
   border-color: var(--color-brand-strong);
+  box-shadow: 0 0 0 3px rgba(99, 56, 246, 0.18);
 }
 
 .form-field.checkbox-field label {

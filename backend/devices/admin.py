@@ -17,17 +17,8 @@ class DeviceAdmin(admin.ModelAdmin):
         "created_at",
     )
 
-    list_filter = (
-        "status",
-        "active",
-        "pending_review",
-        "location",
-    )
+    list_filter = ("status", "active", "pending_review", "location")
 
-    search_fields = (
-        "name",
-        "serial_number",
-        "mqtt_identifier",
-    )
+    search_fields = ("name", "serial_number", "mqtt_identifier")
 
     ordering = ("name",)

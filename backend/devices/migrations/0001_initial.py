@@ -8,9 +8,7 @@ class Migration(migrations.Migration):
 
     initial = True
 
-    dependencies = [
-        ("locations", "0001_initial"),
-    ]
+    dependencies = [("locations", "0001_initial")]
 
     operations = [
         migrations.CreateModel(
@@ -72,5 +70,5 @@ class Migration(migrations.Migration):
                 "verbose_name_plural": "Devices",
                 "ordering": ["name"],
             },
-        ),
+        )
     ]

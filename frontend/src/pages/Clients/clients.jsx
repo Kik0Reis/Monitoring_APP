@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { Check, Eye, Pencil, Trash2 } from "lucide-react";
 
 import { customersApi, countriesApi, fetchAll } from "../../services/api";
 import { useCrudResource } from "../../hooks/useCrudResource";
@@ -158,7 +159,7 @@ function Clients() {
                 title="Approve"
                 onClick={() => handleApprove(client)}
               >
-                ✓
+                <Check size={16} />
               </button>
             )}
             <button
@@ -166,21 +167,21 @@ function Clients() {
               aria-label={`View ${client.name}`}
               onClick={() => resource.openView(client)}
             >
-              👁
+              <Eye size={16} />
             </button>
             <button
               className="icon-button"
               aria-label={`Edit ${client.name}`}
               onClick={() => resource.openEdit(client)}
             >
-              ✎
+              <Pencil size={16} />
             </button>
             <button
               className="icon-button danger"
               aria-label={`Delete ${client.name}`}
               onClick={() => resource.handleDelete(client)}
             >
-              🗑
+              <Trash2 size={16} />
             </button>
           </>
         )}

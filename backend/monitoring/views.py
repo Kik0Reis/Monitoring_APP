@@ -67,9 +67,7 @@ class ProblemsView(APIView):
         active_only = str(active_only).lower() not in ("false", "0", "no")
 
         return Response(
-            {
-                "results": get_problem_alerts(limit=limit, active_only=active_only),
-            }
+            {"results": get_problem_alerts(limit=limit, active_only=active_only)}
         )
 
 

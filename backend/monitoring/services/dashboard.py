@@ -14,12 +14,11 @@ from cameras.models import Camera, CameraStatus
 from devices.models import Device, DeviceStatus
 from locations.models import Location
 from monitoring.models import CameraAlert, CameraAlertType, DeviceAlert
+from monitoring.services.device_health import is_component_healthy
 
 
 def get_dashboard_summary():
-    """
-    Return the current monitoring summary.
-    """
+    """Return the top-line device/camera counts shown at the top of the dashboard."""
 
     devices = Device.objects.filter(active=True, device_type="EDGE")
 
@@ -56,11 +55,7 @@ def get_problem_alerts(limit=10, active_only=True):
 
     camera_problem_alerts = CameraAlert.objects.filter(
         alert_type__in=[CameraAlertType.CAMERA_ERROR, CameraAlertType.CAMERA_OFFLINE]
-    ).select_related(
-        "camera",
-        "camera__device",
-        "camera__device__location",
-    )
+    ).select_related("camera", "camera__device", "camera__device__location")
 
     if active_only:
         device_alerts = device_alerts.filter(active=True)
@@ -89,13 +84,11 @@ def get_problem_alerts(limit=10, active_only=True):
 
 
 def get_camera_detections(limit=50):
+    """Return the most recent real-world detections (CAMERA_ALERT), newest first."""
+
     camera_alerts = (
         CameraAlert.objects.filter(alert_type=CameraAlertType.CAMERA_ALERT)
-        .select_related(
-            "camera",
-            "camera__device",
-            "camera__device__location",
-        )
+        .select_related("camera", "camera__device", "camera__device__location")
         .order_by("-created_at")[:limit]
     )
 
@@ -108,6 +101,8 @@ def get_camera_detections(limit=50):
 
 
 def _serialize_device_alerts(device_alerts):
+    """Turn a DeviceAlert queryset into the plain dict shape the dashboard/API return."""
+
     alert_type_labels = {
         "DEVICE_OFFLINE": "Offline",
         "DEVICE_HEALTH": "Health",
@@ -143,6 +138,8 @@ def _serialize_device_alerts(device_alerts):
 
 
 def _serialize_camera_alerts(camera_alerts):
+    """Turn a CameraAlert queryset into the plain dict shape the dashboard/API return."""
+
     alert_type_labels = {
         "CAMERA_ALERT": "Camera",
         "CAMERA_ERROR": "Camera Error",
@@ -184,6 +181,8 @@ def _serialize_camera_alerts(camera_alerts):
 
 
 def _device_has_component_problem(device):
+    """Return the names of any unhealthy internal components on this device."""
+
     component_statuses = (
         device.component_statuses if isinstance(device.component_statuses, dict) else {}
     )
@@ -196,7 +195,7 @@ def _device_has_component_problem(device):
 
         status = str(component.get("status", "")).lower()
 
-        if status not in {"up", "online", "healthy"}:
+        if not is_component_healthy(status):
             unhealthy.append(component_name)
 
     return unhealthy
@@ -215,10 +214,8 @@ def get_devices_with_problems(limit=10):
         .select_related("location")
         .annotate(
             active_alert_count=Count(
-                "alerts",
-                filter=Q(alerts__active=True),
-                distinct=True,
-            ),
+                "alerts", filter=Q(alerts__active=True), distinct=True
+            )
         )
     )
 
@@ -265,10 +262,7 @@ def get_devices_with_problems(limit=10):
         )
 
     # Offline devices first, then unknown, then everything else.
-    status_priority = {
-        DeviceStatus.OFFLINE: 0,
-        DeviceStatus.UNKNOWN: 1,
-    }
+    status_priority = {DeviceStatus.OFFLINE: 0, DeviceStatus.UNKNOWN: 1}
 
     result.sort(
         key=lambda item: (
@@ -301,26 +295,17 @@ def get_locations_with_problems(limit=10):
         Location.objects.annotate(
             offline_devices=Count(
                 "devices",
-                filter=Q(
-                    devices__active=True,
-                    devices__status=DeviceStatus.OFFLINE,
-                ),
+                filter=Q(devices__active=True, devices__status=DeviceStatus.OFFLINE),
                 distinct=True,
             ),
             unknown_devices=Count(
                 "devices",
-                filter=Q(
-                    devices__active=True,
-                    devices__status=DeviceStatus.UNKNOWN,
-                ),
+                filter=Q(devices__active=True, devices__status=DeviceStatus.UNKNOWN),
                 distinct=True,
             ),
             active_device_alerts=Count(
                 "devices__alerts",
-                filter=Q(
-                    devices__active=True,
-                    devices__alerts__active=True,
-                ),
+                filter=Q(devices__active=True, devices__alerts__active=True),
                 distinct=True,
             ),
             offline_cameras=Count(
@@ -334,8 +319,7 @@ def get_locations_with_problems(limit=10):
             active_camera_alerts=Count(
                 "devices__cameras__alerts",
                 filter=Q(
-                    devices__cameras__active=True,
-                    devices__cameras__alerts__active=True,
+                    devices__cameras__active=True, devices__cameras__alerts__active=True
                 ),
                 distinct=True,
             ),

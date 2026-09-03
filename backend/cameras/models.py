@@ -11,53 +11,29 @@ class CameraStatus(models.TextChoices):
 
 
 class Camera(TimeStampedModel):
-    """
-    Represents a camera connected to an Edge device.
+    """A camera attached to an Edge device. One device can have several."""
 
-    One Edge Device can have multiple Cameras.
-    """
+    device = models.ForeignKey(Device, on_delete=models.CASCADE, related_name="cameras")
 
-    device = models.ForeignKey(
-        Device,
-        on_delete=models.CASCADE,
-        related_name="cameras",
-    )
+    name = models.CharField(max_length=150)
 
-    name = models.CharField(
-        max_length=150,
-    )
+    camera_identifier = models.CharField(max_length=150, db_index=True)
 
-    camera_identifier = models.CharField(
-        max_length=150,
-        db_index=True,
-    )
-
-    channel = models.PositiveIntegerField(
-        default=1,
-    )
+    channel = models.PositiveIntegerField(default=1)
 
     status = models.CharField(
-        max_length=10,
-        choices=CameraStatus.choices,
-        default=CameraStatus.UNKNOWN,
+        max_length=10, choices=CameraStatus.choices, default=CameraStatus.UNKNOWN
     )
 
-    last_seen = models.DateTimeField(
-        null=True,
-        blank=True,
-    )
+    last_seen = models.DateTimeField(null=True, blank=True)
 
-    active = models.BooleanField(
-        default=True,
-    )
+    active = models.BooleanField(default=True)
 
     # True for cameras auto-created from an MQTT topic (the device's
     # ".../cameras" status list) that didn't match any existing camera.
     # Fully functional either way — this is just a UI flag so a human can
     # confirm it / give it a nicer name.
-    pending_review = models.BooleanField(
-        default=False,
-    )
+    pending_review = models.BooleanField(default=False)
 
     class Meta:
         ordering = ["name"]
@@ -66,21 +42,13 @@ class Camera(TimeStampedModel):
 
         constraints = [
             models.UniqueConstraint(
-                fields=[
-                    "device",
-                    "camera_identifier",
-                    "channel",
-                ],
+                fields=["device", "camera_identifier", "channel"],
                 name="unique_camera_per_device_channel",
             ),
             models.UniqueConstraint(
-                fields=[
-                    "device",
-                    "name",
-                ],
-                name="unique_camera_name_per_device",
+                fields=["device", "name"], name="unique_camera_name_per_device"
             ),
         ]
 
     def __str__(self):
-        return f"{self.name} " f"({self.camera_identifier}/ch{self.channel})"
+        return f"{self.name} ({self.camera_identifier}/ch{self.channel})"

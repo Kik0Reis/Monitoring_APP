@@ -34,9 +34,10 @@
 }
 
 .alerts-tab.active {
-  background: var(--color-ink);
-  border-color: var(--color-ink);
+  background: var(--color-brand);
+  border-color: var(--color-brand);
   color: white;
+  box-shadow: 0 4px 18px var(--button-glow);
 }
 
 .alerts-tab-count {

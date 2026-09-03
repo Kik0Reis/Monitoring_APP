@@ -8,9 +8,7 @@ class Migration(migrations.Migration):
 
     initial = True
 
-    dependencies = [
-        ("devices", "0002_device_unique_device_name_per_location"),
-    ]
+    dependencies = [("devices", "0002_device_unique_device_name_per_location")]
 
     operations = [
         migrations.CreateModel(

@@ -6,18 +6,15 @@ from countries.serializers import CountrySummarySerializer
 from .models import Customer
 
 
-# Serializer responsible for validating and serializing Customer objects.
 class CustomerSerializer(serializers.ModelSerializer):
+    """Validates and (de)serializes Customer records for the API."""
+
     # Nested country information returned in responses.
-    country = CountrySummarySerializer(
-        read_only=True,
-    )
+    country = CountrySummarySerializer(read_only=True)
 
     # Country ID used when creating or updating a customer.
     country_id = serializers.PrimaryKeyRelatedField(
-        queryset=Country.objects.all(),
-        source="country",
-        write_only=True,
+        queryset=Country.objects.all(), source="country", write_only=True
     )
 
     # Number of locations that belong to this customer.
@@ -44,12 +41,7 @@ class CustomerSerializer(serializers.ModelSerializer):
             "updated_at",
         )
 
-        read_only_fields = (
-            "id",
-            "pending_review",
-            "created_at",
-            "updated_at",
-        )
+        read_only_fields = ("id", "pending_review", "created_at", "updated_at")
 
     def get_locations_count(self, obj):
         annotated = getattr(obj, "locations_count_annotation", None)
@@ -76,12 +68,7 @@ class CustomerSerializer(serializers.ModelSerializer):
         ]
 
     def validate_name(self, value):
-        """
-        Validate the customer name.
-
-        Remove whitespace.
-        Ensure the name has at least 2 characters.
-        """
+        """Trim whitespace and require at least 2 characters."""
 
         value = value.strip()
 
@@ -93,22 +80,14 @@ class CustomerSerializer(serializers.ModelSerializer):
         return value
 
     def validate_description(self, value):
-        """
-        Remove whitespace from the description.
-        """
+        """Trim whitespace from the description."""
 
         return value.strip()
 
 
 class CustomerSummarySerializer(serializers.ModelSerializer):
-    """
-    Lightweight serializer used when Customer is nested
-    inside another serializer.
-    """
+    """Minimal Customer fields, for nesting inside other serializers."""
 
     class Meta:
         model = Customer
-        fields = (
-            "id",
-            "name",
-        )
+        fields = ("id", "name")

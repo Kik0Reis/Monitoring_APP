@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { Check, Pencil, Trash2 } from "lucide-react";
 
 import { locationsApi, devicesApi } from "../../services/api";
 import { useCrudResource } from "../../hooks/useCrudResource";
@@ -198,17 +199,17 @@ function LocationDetail() {
                   title="Approve"
                   onClick={() => handleApproveDevice(device)}
                 >
-                  ✓
+                  <Check size={16} />
                 </button>
               )}
               <button className="icon-button" onClick={() => devices.openEdit(device)}>
-                ✎
+                <Pencil size={16} />
               </button>
               <button
                 className="icon-button danger"
                 onClick={() => devices.handleDelete(device)}
               >
-                🗑
+                <Trash2 size={16} />
               </button>
             </>
           )}

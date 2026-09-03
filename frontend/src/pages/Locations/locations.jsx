@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { Check, Eye, Pencil, Trash2 } from "lucide-react";
 
 import { locationsApi, customersApi, fetchAll } from "../../services/api";
 import { useCrudResource } from "../../hooks/useCrudResource";
@@ -158,7 +159,7 @@ function Locations() {
                 title="Approve"
                 onClick={() => handleApprove(location)}
               >
-                ✓
+                <Check size={16} />
               </button>
             )}
             <button
@@ -166,21 +167,21 @@ function Locations() {
               aria-label={`View ${location.name}`}
               onClick={() => resource.openView(location)}
             >
-              👁
+              <Eye size={16} />
             </button>
             <button
               className="icon-button"
               aria-label={`Edit ${location.name}`}
               onClick={() => resource.openEdit(location)}
             >
-              ✎
+              <Pencil size={16} />
             </button>
             <button
               className="icon-button danger"
               aria-label={`Delete ${location.name}`}
               onClick={() => resource.handleDelete(location)}
             >
-              🗑
+              <Trash2 size={16} />
             </button>
           </>
         )}

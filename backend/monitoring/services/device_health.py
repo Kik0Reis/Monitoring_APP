@@ -37,15 +37,15 @@ from monitoring.models import (
 HEALTHY_COMPONENT_STATUSES = {"up", "online", "healthy"}
 
 
-def _is_component_healthy(status: str) -> bool:
+def is_component_healthy(status: str) -> bool:
+    """Whether a component's reported status string counts as "fine"."""
+
     return str(status).lower() in HEALTHY_COMPONENT_STATUSES
 
 
 @transaction.atomic
-def update_device_status(
-    device: Device,
-    new_status: str,
-) -> Device:
+def update_device_status(device: Device, new_status: str) -> Device:
+    """Change a device's status and log the transition, if it actually changed."""
 
     if new_status not in DeviceStatus.values:
         raise ValueError(f"Invalid device status: {new_status}")
@@ -57,74 +57,51 @@ def update_device_status(
 
     device.status = new_status
 
-    device.save(
-        update_fields=[
-            "status",
-            "updated_at",
-        ]
-    )
+    device.save(update_fields=["status", "updated_at"])
 
     DeviceStatusHistory.objects.create(
-        device=device,
-        old_status=old_status,
-        new_status=new_status,
+        device=device, old_status=old_status, new_status=new_status
     )
 
     return device
 
 
-def update_last_seen(
-    device: Device,
-    received_at=None,
-) -> Device:
+def update_last_seen(device: Device, received_at=None) -> Device:
+    """Stamp a device as having communicated just now (or at received_at)."""
 
     if received_at is None:
         received_at = timezone.now()
 
     device.last_seen = received_at
 
-    device.save(
-        update_fields=[
-            "last_seen",
-            "updated_at",
-        ]
-    )
+    device.save(update_fields=["last_seen", "updated_at"])
 
     return device
 
 
 @transaction.atomic
 def record_heartbeat(
-    device: Device,
-    payload: dict[str, Any],
-    received_at=None,
+    device: Device, payload: dict[str, Any], received_at=None
 ) -> DeviceHeartbeat:
+    """Log a heartbeat row for this device and refresh its last_seen."""
 
     if received_at is None:
         received_at = timezone.now()
 
     heartbeat = DeviceHeartbeat.objects.create(
-        device=device,
-        received_at=received_at,
-        raw_payload=payload,
+        device=device, received_at=received_at, raw_payload=payload
     )
 
-    update_last_seen(
-        device=device,
-        received_at=received_at,
-    )
+    update_last_seen(device=device, received_at=received_at)
 
     return heartbeat
 
 
-def create_offline_alert(
-    device: Device,
-) -> DeviceAlert:
+def create_offline_alert(device: Device) -> DeviceAlert:
+    """Raise a DEVICE_OFFLINE alert, or reuse the existing one if it's still active."""
 
     existing_alert = DeviceAlert.objects.filter(
-        device=device,
-        alert_type=AlertType.DEVICE_OFFLINE,
-        active=True,
+        device=device, alert_type=AlertType.DEVICE_OFFLINE, active=True
     ).first()
 
     if existing_alert:
@@ -134,29 +111,21 @@ def create_offline_alert(
         device=device,
         alert_type=AlertType.DEVICE_OFFLINE,
         severity=AlertSeverity.CRITICAL,
-        message=(f"Device '{device.name}' is offline."),
+        message=f"Device '{device.name}' is offline.",
     )
 
 
-def resolve_offline_alerts(
-    device: Device,
-) -> int:
+def resolve_offline_alerts(device: Device) -> int:
+    """Close out any active DEVICE_OFFLINE alert for this device."""
 
     return DeviceAlert.objects.filter(
-        device=device,
-        alert_type=AlertType.DEVICE_OFFLINE,
-        active=True,
-    ).update(
-        active=False,
-        resolved_at=timezone.now(),
-    )
+        device=device, alert_type=AlertType.DEVICE_OFFLINE, active=True
+    ).update(active=False, resolved_at=timezone.now())
 
 
 @transaction.atomic
 def update_component_status(
-    device: Device,
-    component_name: str,
-    payload: dict[str, Any],
+    device: Device, component_name: str, payload: dict[str, Any]
 ) -> Device:
     """
     Store the status of an internal Edge component.
@@ -184,21 +153,15 @@ def update_component_status(
 
     device.component_statuses = component_statuses
 
-    device.save(
-        update_fields=[
-            "component_statuses",
-            "updated_at",
-        ]
-    )
+    device.save(update_fields=["component_statuses", "updated_at"])
 
     return device
 
 
 def create_health_alert(
-    device: Device,
-    unhealthy_components: list[str],
-    payload: dict[str, Any],
+    device: Device, unhealthy_components: list[str], payload: dict[str, Any]
 ) -> DeviceAlert:
+    """Raise a DEVICE_HEALTH alert naming the unhealthy component(s), reusing an active one."""
 
     message = (
         f"Device '{device.name}' has unhealthy components: "
@@ -206,9 +169,7 @@ def create_health_alert(
     )
 
     existing_alert = DeviceAlert.objects.filter(
-        device=device,
-        alert_type=AlertType.DEVICE_HEALTH,
-        active=True,
+        device=device, alert_type=AlertType.DEVICE_HEALTH, active=True
     ).first()
 
     if existing_alert:
@@ -223,18 +184,12 @@ def create_health_alert(
     )
 
 
-def resolve_health_alerts(
-    device: Device,
-) -> int:
+def resolve_health_alerts(device: Device) -> int:
+    """Close out any active DEVICE_HEALTH alert for this device."""
 
     return DeviceAlert.objects.filter(
-        device=device,
-        alert_type=AlertType.DEVICE_HEALTH,
-        active=True,
-    ).update(
-        active=False,
-        resolved_at=timezone.now(),
-    )
+        device=device, alert_type=AlertType.DEVICE_HEALTH, active=True
+    ).update(active=False, resolved_at=timezone.now())
 
 
 @transaction.atomic
@@ -273,40 +228,25 @@ def process_device_status(
     if source == "aiaction-edge":
 
         if status == "online":
-            update_last_seen(
-                device=device,
-                received_at=received_at,
-            )
+            update_last_seen(device=device, received_at=received_at)
 
-            update_device_status(
-                device=device,
-                new_status=DeviceStatus.ONLINE,
-            )
+            update_device_status(device=device, new_status=DeviceStatus.ONLINE)
 
             resolve_offline_alerts(device)
 
             return device
 
         if status == "offline":
-            update_device_status(
-                device=device,
-                new_status=DeviceStatus.OFFLINE,
-            )
+            update_device_status(device=device, new_status=DeviceStatus.OFFLINE)
 
             create_offline_alert(device)
 
             return device
 
         if status == "unknown":
-            update_last_seen(
-                device=device,
-                received_at=received_at,
-            )
+            update_last_seen(device=device, received_at=received_at)
 
-            update_device_status(
-                device=device,
-                new_status=DeviceStatus.UNKNOWN,
-            )
+            update_device_status(device=device, new_status=DeviceStatus.UNKNOWN)
 
             return device
 
@@ -319,41 +259,28 @@ def process_device_status(
     # idmr
 
     component_payload = dict(payload or {})
-    component_payload.setdefault(
-        "status",
-        status,
-    )
+    component_payload.setdefault("status", status)
 
     update_component_status(
-        device=device,
-        component_name=source or "unknown",
-        payload=component_payload,
+        device=device, component_name=source or "unknown", payload=component_payload
     )
 
     # A detectorapi status message is still communication from the Edge.
     # Therefore update last_seen and keep the Edge ONLINE.
     #
     # Same principle applies to detector/idmr.
-    update_last_seen(
-        device=device,
-        received_at=received_at,
-    )
+    update_last_seen(device=device, received_at=received_at)
 
-    update_device_status(
-        device=device,
-        new_status=DeviceStatus.ONLINE,
-    )
+    update_device_status(device=device, new_status=DeviceStatus.ONLINE)
 
     resolve_offline_alerts(device)
 
     # Component unhealthy?
-    if not _is_component_healthy(status):
+    if not is_component_healthy(status):
 
         create_health_alert(
             device=device,
-            unhealthy_components=[
-                source or "unknown",
-            ],
+            unhealthy_components=[source or "unknown"],
             payload=component_payload,
         )
 
@@ -361,16 +288,12 @@ def process_device_status(
 
         # If this message says the component is healthy, we can
         # re-evaluate the complete component state.
-        process_component_health_alerts(
-            device=device,
-        )
+        process_component_health_alerts(device=device)
 
     return device
 
 
-def process_component_health_alerts(
-    device: Device,
-) -> None:
+def process_component_health_alerts(device: Device) -> None:
     """
     Re-evaluate all known component statuses.
 
@@ -390,7 +313,7 @@ def process_component_health_alerts(
 
         status = str(component.get("status", "")).lower()
 
-        if not _is_component_healthy(status):
+        if not is_component_healthy(status):
             unhealthy_components.append(component_name)
 
     if unhealthy_components:
@@ -408,25 +331,23 @@ def process_component_health_alerts(
 
 @transaction.atomic
 def process_device_health(
-    device: Device,
-    payload: dict[str, Any],
-    received_at=None,
+    device: Device, payload: dict[str, Any], received_at=None
 ) -> DeviceHeartbeat:
+    """
+    Process a full "health" MQTT message: log the heartbeat, mark the
+    Edge online, and update every component's status from the payload's
+    "components" block, raising or clearing a health alert as needed.
+    """
 
     if received_at is None:
         received_at = timezone.now()
 
     heartbeat = record_heartbeat(
-        device=device,
-        payload=payload,
-        received_at=received_at,
+        device=device, payload=payload, received_at=received_at
     )
 
     # A health message proves the Edge is communicating.
-    update_device_status(
-        device=device,
-        new_status=DeviceStatus.ONLINE,
-    )
+    update_device_status(device=device, new_status=DeviceStatus.ONLINE)
 
     resolve_offline_alerts(device)
 
@@ -453,27 +374,19 @@ def process_device_health(
 
         status = str(component.get("status", "")).lower()
 
-        if not _is_component_healthy(status):
+        if not is_component_healthy(status):
             unhealthy_components.append(component_name)
 
     device.component_statuses = component_statuses
 
-    device.save(
-        update_fields=[
-            "health_data",
-            "component_statuses",
-            "updated_at",
-        ]
-    )
+    device.save(update_fields=["health_data", "component_statuses", "updated_at"])
 
     # Health alerts
 
     if unhealthy_components:
 
         create_health_alert(
-            device=device,
-            unhealthy_components=unhealthy_components,
-            payload=payload,
+            device=device, unhealthy_components=unhealthy_components, payload=payload
         )
 
     else:

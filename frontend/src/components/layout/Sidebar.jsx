@@ -23,6 +23,7 @@ function Sidebar() {
   return (
     <aside className="sidebar">
       <div className="sidebar-logo">
+        <span className="sidebar-logo-mark">AT</span>
         <span className="sidebar-logo-text">AiTecServ Monitor App</span>
       </div>
 

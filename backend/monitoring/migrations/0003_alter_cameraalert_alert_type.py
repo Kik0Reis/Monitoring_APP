@@ -5,9 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
 
-    dependencies = [
-        ("monitoring", "0002_cameraalert"),
-    ]
+    dependencies = [("monitoring", "0002_cameraalert")]
 
     operations = [
         migrations.AlterField(
@@ -20,5 +18,5 @@ class Migration(migrations.Migration):
                 ],
                 max_length=30,
             ),
-        ),
+        )
     ]

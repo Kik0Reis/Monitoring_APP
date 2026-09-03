@@ -17,13 +17,7 @@ class CameraAdmin(admin.ModelAdmin):
         "created_at",
     )
 
-    list_filter = (
-        "status",
-        "active",
-        "pending_review",
-        "channel",
-        "device",
-    )
+    list_filter = ("status", "active", "pending_review", "channel", "device")
 
     search_fields = (
         "name",

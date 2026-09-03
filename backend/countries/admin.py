@@ -5,18 +5,10 @@ from .models import Country
 
 @admin.register(Country)
 class CountryAdmin(admin.ModelAdmin):
-    list_display = (
-        "name",
-        "code",
-        "pending_review",
-        "created_at",
-    )
+    list_display = ("name", "code", "pending_review", "created_at")
 
     list_filter = ("pending_review",)
 
-    search_fields = (
-        "name",
-        "code",
-    )
+    search_fields = ("name", "code")
 
     ordering = ("name",)

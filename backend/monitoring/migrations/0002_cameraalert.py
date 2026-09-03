@@ -6,10 +6,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
 
-    dependencies = [
-        ("cameras", "0001_initial"),
-        ("monitoring", "0001_initial"),
-    ]
+    dependencies = [("cameras", "0001_initial"), ("monitoring", "0001_initial")]
 
     operations = [
         migrations.CreateModel(
@@ -56,5 +53,5 @@ class Migration(migrations.Migration):
                 "verbose_name_plural": "Camera Alerts",
                 "ordering": ["-created_at"],
             },
-        ),
+        )
     ]

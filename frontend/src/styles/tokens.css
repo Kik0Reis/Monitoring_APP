@@ -7,36 +7,48 @@
    the inconsistent fonts/sizes/weights across pages before this file
    existed (each page defined its own .page-header h1, .primary-button,
    .status-dot, etc. with slightly different numbers).
+
+   Palette matches the Occivue brand site: near-black background,
+   purple accent with a soft glow, white/lavender-gray text.
    ============================================================ */
 
 :root {
   /* ---- Brand / accent ---- */
-  --color-brand: #4d0b69;
-  --color-brand-strong: #6b3fa0;
+  --color-brand: #6338f6;
+  --color-brand-strong: #7c52ff;
+
+  /* Glow accents, straight from the brand site's own tokens — used
+     sparingly (buttons, focus rings, active nav item) rather than on
+     every card, since a dense monitoring dashboard needs to stay easy
+     to scan more than it needs to look like a landing page. */
+  --glow-color: #2b1646;
+  --highlight-color: #522bd9;
+  --border-glow: rgba(99, 56, 246, 0.8);
+  --button-glow: rgba(99, 56, 246, 0.4);
 
   /* ---- Neutrals ---- */
-  --color-ink: #1f2430;          /* primary text */
-  --color-ink-soft: #4a4d57;     /* secondary text */
-  --color-muted: #8a8d97;        /* tertiary text / labels */
-  --color-faint: #a7aab3;        /* placeholders, timestamps */
+  --color-ink: #ffffff;          /* primary text */
+  --color-ink-soft: #c5cfdd;     /* secondary text */
+  --color-muted: #948fb0;        /* tertiary text / labels */
+  --color-faint: #6d6790;        /* placeholders, timestamps */
 
-  --color-border: #e7e7ec;
-  --color-border-soft: #f0f0f3;
-  --color-surface: #ffffff;
-  --color-surface-alt: #f7f7f9;
-  --color-bg: #f5f5f7;
+  --color-border: rgba(255, 255, 255, 0.08);
+  --color-border-soft: rgba(255, 255, 255, 0.05);
+  --color-surface: #130e26;
+  --color-surface-alt: #1c1638;
+  --color-bg: #0a0714;
 
   /* ---- Status ---- */
-  --color-success: #1fa153;
-  --color-success-bg: #e7f7ee;
-  --color-danger: #d6373f;
-  --color-danger-bg: #fbeaea;
-  --color-warning: #c98a12;
-  --color-warning-bg: #fbf1dd;
-  --color-info: #3563d6;
-  --color-info-bg: #eaf0fd;
-  --color-unknown: #8a8d97;
-  --color-unknown-bg: #eeeef0;
+  --color-success: #2ecc71;
+  --color-success-bg: rgba(46, 204, 113, 0.14);
+  --color-danger: #f0475a;
+  --color-danger-bg: rgba(240, 71, 90, 0.14);
+  --color-warning: #f5a524;
+  --color-warning-bg: rgba(245, 165, 36, 0.14);
+  --color-info: #8b6bfa;
+  --color-info-bg: rgba(99, 56, 246, 0.14);
+  --color-unknown: #948fb0;
+  --color-unknown-bg: rgba(148, 143, 176, 0.14);
 
   /* ---- Type scale ---- */
   --font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont,
@@ -68,8 +80,9 @@
   --radius-sm: 6px;
   --radius-md: 8px;
   --radius-lg: 12px;
-  --shadow-sm: 0 1px 2px rgba(16, 18, 24, 0.04);
-  --shadow-md: 0 4px 16px rgba(16, 18, 24, 0.08);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow-md: 0 12px 32px rgba(0, 0, 0, 0.5);
+  --shadow-glow: 0 0 0 3px rgba(99, 56, 246, 0.2), 0 4px 18px rgba(99, 56, 246, 0.35);
 
   --sidebar-width: 220px;
 }

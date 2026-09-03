@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { Check, Eye, Pencil, Trash2 } from "lucide-react";
 
 import { devicesApi, locationsApi, fetchAll } from "../../services/api";
 import { useCrudResource } from "../../hooks/useCrudResource";
@@ -182,7 +183,7 @@ function Devices() {
                 title="Approve"
                 onClick={() => handleApprove(device)}
               >
-                ✓
+                <Check size={16} />
               </button>
             )}
             <button
@@ -190,21 +191,21 @@ function Devices() {
               aria-label={`View ${device.name}`}
               onClick={() => resource.openView(device)}
             >
-              👁
+              <Eye size={16} />
             </button>
             <button
               className="icon-button"
               aria-label={`Edit ${device.name}`}
               onClick={() => resource.openEdit(device)}
             >
-              ✎
+              <Pencil size={16} />
             </button>
             <button
               className="icon-button danger"
               aria-label={`Delete ${device.name}`}
               onClick={() => resource.handleDelete(device)}
             >
-              🗑
+              <Trash2 size={16} />
             </button>
           </>
         )}

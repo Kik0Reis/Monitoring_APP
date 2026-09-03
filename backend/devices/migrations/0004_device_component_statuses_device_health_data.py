@@ -5,9 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
 
-    dependencies = [
-        ("devices", "0003_alter_device_device_type"),
-    ]
+    dependencies = [("devices", "0003_alter_device_device_type")]
 
     operations = [
         migrations.AddField(
