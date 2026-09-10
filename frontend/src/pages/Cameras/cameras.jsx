@@ -13,6 +13,7 @@ import Pagination from "../../components/common/Pagination";
 import FormField from "../../components/common/FormField";
 import StatusBadge from "../../components/common/StatusBadge";
 import PendingReviewBadge from "../../components/common/PendingReviewBadge";
+import NotOnMqttBadge from "../../components/common/NotOnMqttBadge";
 import CrudModal from "../../components/crud/CrudModal";
 
 import "./Cameras.css";
@@ -96,6 +97,7 @@ function Cameras() {
         <span className="entity-name">
           {row.name}
           {row.pending_review && <PendingReviewBadge />}
+          {!row.on_mqtt && <NotOnMqttBadge />}
           <span className="entity-subtext">{row.device_name}</span>
         </span>
       ),

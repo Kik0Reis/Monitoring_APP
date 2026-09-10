@@ -53,6 +53,24 @@ HEARTBEAT_CLEANUP_INTERVAL_HOURS = int(
     os.getenv("HEARTBEAT_CLEANUP_INTERVAL_HOURS", "24")
 )
 
+# Resolved (never active) DeviceAlert/CameraAlert rows older than this are
+# deleted automatically by the same heartbeat_worker cleanup cycle above
+# (see monitoring/services/retention.py). Active alerts are never touched.
+ALERT_RETENTION_DAYS = int(os.getenv("ALERT_RETENTION_DAYS", "30"))
+
+
+# MQTT presence reconciliation.
+#
+# The subscriber periodically forces the broker to resend every retained
+# message (unsubscribe + re-subscribe to the wildcard topic), waits this
+# many seconds for replies, and flags any known device/camera that didn't
+# reply as "not on MQTT" (see monitoring/services/mqtt_reconciliation.py).
+
+MQTT_RECONCILE_INTERVAL_MINUTES = int(
+    os.getenv("MQTT_RECONCILE_INTERVAL_MINUTES", "30")
+)
+MQTT_RECONCILE_WINDOW_SECONDS = int(os.getenv("MQTT_RECONCILE_WINDOW_SECONDS", "15"))
+
 
 # Application definition
 
@@ -112,7 +130,29 @@ ASGI_APPLICATION = "config.asgi.application"
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
 DATABASES = {
-    "default": {"ENGINE": "django.db.backends.sqlite3", "NAME": BASE_DIR / "db.sqlite3"}
+    "default": {
+        "ENGINE": "django.db.backends.sqlite3",
+        "NAME": BASE_DIR / "db.sqlite3",
+        "OPTIONS": {
+            # SQLite raises "database is locked" almost immediately by
+            # default. This app has THREE processes (backend, the MQTT
+            # subscriber, and the heartbeat worker) sharing the same
+            # db.sqlite3 file via a bind mount, so that happens often
+            # enough to matter -- and previously it happened silently
+            # inside the MQTT subscriber, which just logged and moved on,
+            # losing the write. Raising the busy-timeout makes sqlite3
+            # retry for up to this many seconds before giving up, instead
+            # of failing immediately.
+            #
+            # Deliberately NOT setting journal_mode=WAL here: this app is
+            # also sometimes run outside Docker (backend on Windows,
+            # containers on WSL2/Linux), and WAL relies on shared-memory
+            # -wal/-shm sidecar files that don't work reliably across that
+            # mix of environments -- it corrupted the database in testing.
+            # A plain busy "timeout" avoids that entirely.
+            "timeout": int(os.getenv("SQLITE_TIMEOUT_SECONDS", "20")),
+        },
+    }
 }
 
 

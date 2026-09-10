@@ -10,16 +10,9 @@ import Breadcrumbs from "../../components/common/Breadcrumbs";
 import FormField from "../../components/common/FormField";
 import StatusBadge from "../../components/common/StatusBadge";
 import PendingReviewBadge from "../../components/common/PendingReviewBadge";
+import NotOnMqttBadge from "../../components/common/NotOnMqttBadge";
+import ComponentCard, { formatTimestamp } from "../../components/common/ComponentCard";
 import CrudModal from "../../components/crud/CrudModal";
-
-function formatTimestamp(value) {
-  if (!value) return "—";
-  try {
-    return new Date(value).toLocaleString();
-  } catch {
-    return String(value);
-  }
-}
 
 const FORM_FIELDS = [
   { name: "name", label: "Name", type: "text" },
@@ -133,6 +126,7 @@ function CameraDetail() {
                 <h2>{camera.name}</h2>
                 <StatusBadge status={camera.status} />
                 {camera.pending_review && <PendingReviewBadge />}
+                {!camera.on_mqtt && <NotOnMqttBadge />}
               </div>
 
               <div className="detail-summary-meta">
@@ -154,6 +148,20 @@ function CameraDetail() {
                   <span>Camera Identifier</span>
                   <strong>{camera.camera_identifier}</strong>
                 </div>
+                {camera.serial_number && (
+                  <div className="detail-meta-item">
+                    <span>Serial Number</span>
+                    <strong>{camera.serial_number}</strong>
+                  </div>
+                )}
+                {(camera.latitude !== null && camera.latitude !== undefined) && (
+                  <div className="detail-meta-item">
+                    <span>Coordinates</span>
+                    <strong>
+                      {camera.latitude}, {camera.longitude}
+                    </strong>
+                  </div>
+                )}
                 <div className="detail-meta-item">
                   <span>Last Seen</span>
                   <strong>{formatTimestamp(camera.last_seen)}</strong>
@@ -166,6 +174,46 @@ function CameraDetail() {
             </div>
           </div>
         </div>
+      )}
+
+      {camera && camera.alerts && camera.alerts.length > 0 && (
+        <section className="detail-section">
+          <div className="detail-section-header">
+            <h3>Alerts</h3>
+          </div>
+
+          <div className="entity-alerts-list">
+            {camera.alerts.map((alert) => (
+              <div
+                className={`entity-alert-row ${alert.active ? "active" : "resolved"}`}
+                key={alert.id}
+              >
+                <div className="entity-alert-main">
+                  <StatusBadge
+                    status={alert.active ? "warning" : "unknown"}
+                    label={alert.active ? "Active" : "Resolved"}
+                  />
+                  <span>{alert.message}</span>
+                </div>
+                <time>{formatTimestamp(alert.created_at)}</time>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {camera && camera.health_data && Object.keys(camera.health_data).length > 0 && (
+        <section className="detail-section">
+          <div className="detail-section-header">
+            <h3>Component Health</h3>
+          </div>
+
+          <div className="component-grid">
+            {Object.entries(camera.health_data).map(([name, data]) => (
+              <ComponentCard key={name} name={name} data={data} />
+            ))}
+          </div>
+        </section>
       )}
 
       {resource.modalMode && (

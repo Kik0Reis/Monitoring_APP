@@ -44,6 +44,11 @@ class DeviceSerializer(serializers.ModelSerializer):
     # when the device has reported at least one heartbeat.
     latest_heartbeat = serializers.SerializerMethodField()
 
+    # Recent alerts (active and resolved) for this device, newest first.
+    # This is what powers the "what actually went wrong" view on the
+    # device detail page instead of just a status badge.
+    alerts = serializers.SerializerMethodField()
+
     class Meta:
         model = Device
 
@@ -57,15 +62,20 @@ class DeviceSerializer(serializers.ModelSerializer):
             "device_type",
             "status",
             "last_seen",
+            "on_mqtt",
             "active",
             # Full internal component breakdown (detectorapi, detector,
             # idmr, ...) reported by the Edge device over MQTT.
             "component_statuses",
             # Raw payload of the most recent health message.
             "health_data",
+            # Hardware/system info reported on info/edge-device (OS, CPU,
+            # RAM, GPU, IP address, ...). Purely informational.
+            "system_info",
             "latest_heartbeat",
             "cameras_count",
             "breadcrumb",
+            "alerts",
             "pending_review",
             "created_at",
             "updated_at",
@@ -76,8 +86,11 @@ class DeviceSerializer(serializers.ModelSerializer):
             "device_type",
             "status",
             "last_seen",
+            "on_mqtt",
             "component_statuses",
             "health_data",
+            "system_info",
+            "alerts",
             "pending_review",
             "created_at",
             "updated_at",
@@ -130,6 +143,22 @@ class DeviceSerializer(serializers.ModelSerializer):
             return None
 
         return LatestHeartbeatSerializer(heartbeat).data
+
+    def get_alerts(self, obj):
+        # DeviceAlert.Meta.ordering is already "-created_at", and the
+        # view prefetches "alerts" so this doesn't add an extra query.
+        return [
+            {
+                "id": alert.id,
+                "alert_type": alert.alert_type,
+                "severity": alert.severity,
+                "message": alert.message,
+                "active": alert.active,
+                "created_at": alert.created_at,
+                "resolved_at": alert.resolved_at,
+            }
+            for alert in list(obj.alerts.all())[:30]
+        ]
 
     def validate_name(self, value):
         value = value.strip()

@@ -13,7 +13,9 @@ class DeviceViewSet(viewsets.ModelViewSet):
 
     queryset = Device.objects.select_related(
         "location", "location__customer", "location__customer__country"
-    ).annotate(cameras_count_annotation=Count("cameras", distinct=True))
+    ).prefetch_related("alerts").annotate(
+        cameras_count_annotation=Count("cameras", distinct=True)
+    )
 
     serializer_class = DeviceSerializer
 

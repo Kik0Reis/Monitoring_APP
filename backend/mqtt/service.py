@@ -18,25 +18,35 @@ import logging
 
 from monitoring.services.camera_monitor import (
     get_camera,
-    process_camera_alert,
-    process_camera_error,
-    process_camera_event,
+    process_camera_detection,
+    process_camera_info_list,
     process_camera_status_list,
 )
 from monitoring.services.device_health import (
-    process_device_health,
+    process_device_info,
+    process_device_issue,
     process_device_status,
+    process_overall_health,
 )
+from mqtt import reconcile_state
 from mqtt.parser import MQTTParserError, parse_mqtt_message
 from mqtt.provisioning import resolve_device
 
 logger = logging.getLogger(__name__)
 
 # Message types that operate on the Edge device itself.
-DEVICE_MESSAGE_TYPES = {"status", "health", "cameras"}
+DEVICE_MESSAGE_TYPES = {
+    "device_info",
+    "camera_info",
+    "overall_health",
+    "health_cameras",
+    "health_edge_device",
+    "health_component",
+    "issue",
+}
 
 # Message types that operate on an individual camera attached to a device.
-CAMERA_MESSAGE_TYPES = {"alert", "event", "error"}
+CAMERA_MESSAGE_TYPES = {"detection"}
 
 
 def process_mqtt_message(topic: str, payload: bytes | str | dict):
@@ -71,6 +81,11 @@ def process_mqtt_message(topic: str, payload: bytes | str | dict):
     if device is None:
         return None
 
+    # Any message at all from this device proves it's on MQTT right now --
+    # record it in case a reconciliation window is currently open (see
+    # monitoring/services/mqtt_reconciliation.py). Cheap no-op otherwise.
+    reconcile_state.record_device_seen(device.id)
+
     logger.info(
         "MQTT Edge resolved: country=%s client=%s installation=%s "
         "mqtt_identifier=%s device=%s",
@@ -96,56 +111,112 @@ def _handle_device_message(message_type, device, parsed_message):
 
     payload_data = parsed_message["payload"]
 
-    if message_type == "status":
+    if message_type == "device_info":
+        device = process_device_info(device=device, payload=payload_data)
+        logger.info("MQTT device info processed: device=%s", device)
+        return device
+
+    if message_type == "camera_info":
+        processed = process_camera_info_list(device=device, payload=payload_data)
+        device.refresh_from_db()
+        logger.info(
+            "MQTT camera info processed: device=%s cameras=%s", device, processed
+        )
+        return device
+
+    if message_type == "overall_health":
+        process_overall_health(device=device, payload=payload_data)
+        device.refresh_from_db()
+        logger.info(
+            "MQTT overall health processed: device=%s status=%s", device, device.status
+        )
+        return device
+
+    if message_type == "health_cameras":
+        processed = process_camera_status_list(device=device, payload=payload_data)
+        device.refresh_from_db()
+        logger.info(
+            "MQTT camera health list processed: device=%s cameras=%s",
+            device,
+            processed,
+        )
+        return device
+
+    if message_type == "health_edge_device":
         status = payload_data.get("status")
 
         if status is None:
-            logger.warning("MQTT status message does not contain 'status' field")
+            logger.warning(
+                "MQTT health/edge-device message does not contain 'status' field"
+            )
             return None
 
         try:
             device = process_device_status(
                 device=device,
                 status=str(status),
-                source=parsed_message.get("source"),
+                source="edge-device",
                 payload=payload_data,
             )
         except ValueError:
             logger.exception(
-                "Invalid MQTT status received: source=%s status=%s",
-                parsed_message.get("source"),
+                "Invalid MQTT edge-device status received: status=%s", status
+            )
+            return None
+
+        device.refresh_from_db()
+        logger.info(
+            "MQTT edge-device health processed: device=%s status=%s device_status=%s",
+            device,
+            status,
+            device.status,
+        )
+        return device
+
+    if message_type == "health_component":
+        source = parsed_message.get("source")
+        status = payload_data.get("status")
+
+        if status is None:
+            logger.warning(
+                "MQTT component health message does not contain 'status' field: %s",
+                source,
+            )
+            return None
+
+        try:
+            device = process_device_status(
+                device=device, status=str(status), source=source, payload=payload_data
+            )
+        except ValueError:
+            logger.exception(
+                "Invalid MQTT component status received: source=%s status=%s",
+                source,
                 status,
             )
             return None
 
         device.refresh_from_db()
         logger.info(
-            "MQTT status processed: device=%s source=%s status=%s device_status=%s",
+            "MQTT component health processed: device=%s source=%s status=%s "
+            "device_status=%s",
             device,
-            parsed_message.get("source"),
+            source,
             status,
             device.status,
         )
         return device
 
-    if message_type == "health":
-        process_device_health(device=device, payload=payload_data)
-        device.refresh_from_db()
-        logger.info("MQTT health processed: device=%s status=%s", device, device.status)
-        return device
-
-    # message_type == "cameras": a bulk status update for every camera
-    # attached to this device, sent as a single MQTT message.
-    processed = process_camera_status_list(device=device, payload=payload_data)
+    # message_type == "issue"
+    issue_name = parsed_message.get("issue_name")
+    process_device_issue(device=device, issue_name=issue_name, payload=payload_data)
     device.refresh_from_db()
-    logger.info(
-        "MQTT camera status list processed: device=%s cameras=%s", device, processed
-    )
+    logger.info("MQTT device issue processed: device=%s issue=%s", device, issue_name)
     return device
 
 
 def _handle_camera_message(message_type, device, parsed_message, topic):
-    """Handle a message that targets one specific camera (alert/event/error)."""
+    """Handle a message that targets one specific camera (detections)."""
 
     camera_id = parsed_message.get("camera_id")
     channel = parsed_message.get("channel")
@@ -170,38 +241,17 @@ def _handle_camera_message(message_type, device, parsed_message, topic):
         "MQTT camera resolved: device=%s camera=%s channel=%s", device, camera, channel
     )
 
+    reconcile_state.record_camera_seen(camera.id)
+
     payload_data = parsed_message["payload"]
 
-    if message_type == "alert":
-        alert = process_camera_alert(camera=camera, payload=payload_data)
-        camera.refresh_from_db()
-        logger.info(
-            "Camera alert processed: camera=%s alert=%s status=%s",
-            camera,
-            alert,
-            camera.status,
-        )
-        return camera
-
-    if message_type == "event":
-        action_code = parsed_message.get("action_code")
-        process_camera_event(
-            camera=camera, payload=payload_data, action_code=action_code
-        )
-        camera.refresh_from_db()
-        logger.info(
-            "Camera event processed: camera=%s action=%s status=%s",
-            camera,
-            action_code,
-            camera.status,
-        )
-        return camera
-
-    # message_type == "error"
-    alert = process_camera_error(camera=camera, payload=payload_data)
+    # message_type == "detection" (the only camera-specific message type
+    # left -- see mqtt/parser.py for the topics that used to be split
+    # into separate alert/event/error topics).
+    alert = process_camera_detection(camera=camera, payload=payload_data)
     camera.refresh_from_db()
     logger.info(
-        "Camera error processed: camera=%s alert=%s status=%s",
+        "Camera detection processed: camera=%s alert=%s status=%s",
         camera,
         alert,
         camera.status,

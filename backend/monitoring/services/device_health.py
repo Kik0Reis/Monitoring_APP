@@ -18,9 +18,10 @@ MQTT component statuses such as "up" and "down" must NEVER be
 stored in Device.status.
 """
 
+import logging
 from typing import Any
 
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from devices.models import Device, DeviceStatus
@@ -31,6 +32,8 @@ from monitoring.models import (
     DeviceHeartbeat,
     DeviceStatusHistory,
 )
+
+logger = logging.getLogger(__name__)
 
 # Component-level status strings (as reported over MQTT) that count as
 # "everything is fine". Anything else is treated as unhealthy.
@@ -201,17 +204,18 @@ def process_device_status(
     received_at=None,
 ) -> Device:
     """
-    Process a status/{source} MQTT message.
+    Process a health/{source} MQTT message.
 
     Important distinction:
 
-        status/detectorapi
-        status/detector
-        status/idmr
+        health/detectorapi
+        health/detector
+        health/idmr
+        (or any other health/{component} topic)
 
     are component statuses.
 
-        status/aiaction-edge
+        health/edge-device
 
     represents the actual Edge MQTT connection/LWT status.
     """
@@ -223,9 +227,9 @@ def process_device_status(
 
     # Actual Edge status
     #
-    # status/aiaction-edge
+    # health/edge-device
 
-    if source == "aiaction-edge":
+    if source == "edge-device":
 
         if status == "online":
             update_last_seen(device=device, received_at=received_at)
@@ -263,6 +267,14 @@ def process_device_status(
 
     update_component_status(
         device=device, component_name=source or "unknown", payload=component_payload
+    )
+
+    # Extract this component's per-camera breakdown (if any) onto the
+    # relevant Camera -- see camera_monitor.update_camera_component_health.
+    from monitoring.services.camera_monitor import update_camera_component_health
+
+    update_camera_component_health(
+        device=device, source=source or "unknown", component_payload=component_payload
     )
 
     # A detectorapi status message is still communication from the Edge.
@@ -330,39 +342,163 @@ def process_component_health_alerts(device: Device) -> None:
 
 
 @transaction.atomic
-def process_device_health(
-    device: Device, payload: dict[str, Any], received_at=None
-) -> DeviceHeartbeat:
+def process_device_info(device: Device, payload: dict[str, Any], received_at=None) -> Device:
     """
-    Process a full "health" MQTT message: log the heartbeat, mark the
-    Edge online, and update every component's status from the payload's
-    "components" block, raising or clearing a health alert as needed.
+    Process aiaction/.../info/edge-device: hardware/system info about the
+    Edge box itself (OS, CPU, RAM, GPU, IP address, ...). Stored as-is in
+    Device.system_info for display on the device detail page.
+
+    Its "device_id" is a real, stable hardware identifier -- while the
+    device is still pending_review, this replaces the auto-generated
+    "AUTO-..." placeholder serial number with it, the same way camera
+    identity fields are only auto-filled before a human confirms them.
     """
 
     if received_at is None:
         received_at = timezone.now()
 
-    heartbeat = record_heartbeat(
-        device=device, payload=payload, received_at=received_at
+    update_fields = ["system_info", "updated_at"]
+
+    device.system_info = payload
+
+    real_serial = payload.get("device_id")
+
+    if device.pending_review and real_serial and device.serial_number != real_serial:
+        device.serial_number = real_serial
+        update_fields.append("serial_number")
+
+    try:
+        device.save(update_fields=update_fields)
+    except IntegrityError:
+        # Another device already has this serial number (unlikely, but
+        # possible with duplicate/misconfigured hardware) -- keep the
+        # placeholder rather than crash MQTT processing.
+        logger.warning(
+            "Could not set serial number '%s' on device %s from MQTT info: "
+            "already in use by another device.",
+            real_serial,
+            device,
+        )
+        device.serial_number = Device.objects.get(pk=device.pk).serial_number
+        device.save(update_fields=["system_info", "updated_at"])
+
+    update_last_seen(device=device, received_at=received_at)
+
+    # Receiving system info is still communication from the Edge.
+    if device.status == DeviceStatus.OFFLINE:
+        update_device_status(device=device, new_status=DeviceStatus.ONLINE)
+        resolve_offline_alerts(device)
+
+    return device
+
+
+def create_device_issue_alert(
+    device: Device, issue_name: str, payload: dict[str, Any]
+) -> DeviceAlert:
+    """
+    Raise a DEVICE_ERROR alert for a named issue reported on
+    aiaction/.../issues/{issue_name}, reusing the existing active alert
+    for that same issue_name instead of duplicating it.
+    """
+
+    existing_alerts = DeviceAlert.objects.filter(
+        device=device, alert_type=AlertType.DEVICE_ERROR, active=True
     )
 
-    # A health message proves the Edge is communicating.
+    for alert in existing_alerts:
+        if alert.raw_payload.get("issue_name") == issue_name:
+            return alert
+
+    message = (
+        payload.get("message")
+        or payload.get("description")
+        or f"Device '{device.name}' reported issue: {issue_name}."
+    )
+
+    stored_payload = dict(payload)
+    stored_payload["issue_name"] = issue_name
+
+    return DeviceAlert.objects.create(
+        device=device,
+        alert_type=AlertType.DEVICE_ERROR,
+        severity=AlertSeverity.WARNING,
+        message=message,
+        raw_payload=stored_payload,
+    )
+
+
+@transaction.atomic
+def process_device_issue(
+    device: Device, issue_name: str, payload: dict[str, Any], received_at=None
+) -> DeviceAlert:
+    """Process aiaction/.../issues/{issue_name}: a named problem reported by the Edge."""
+
+    if received_at is None:
+        received_at = timezone.now()
+
+    update_last_seen(device=device, received_at=received_at)
+
+    # An issue report is still communication from the Edge.
+    if device.status == DeviceStatus.OFFLINE:
+        update_device_status(device=device, new_status=DeviceStatus.ONLINE)
+        resolve_offline_alerts(device)
+
+    return create_device_issue_alert(device=device, issue_name=issue_name, payload=payload)
+
+
+@transaction.atomic
+def process_overall_health(
+    device: Device, payload: dict[str, Any], received_at=None
+) -> DeviceHeartbeat:
+    """
+    Process aiaction/.../health/overall-health: the combined snapshot that
+    replaced the old plain "health" topic. Its "components" block nests
+    the Edge's own status and the full camera list alongside the usual
+    detectorapi/detector/idmr component statuses.
+
+    - "edge-device" is discarded entirely: it's just the Edge's own
+      online/offline status, which is already what Device.status/the
+      status badge shows -- keeping it as its own "component" card would
+      just be a confusing duplicate.
+    - "cameras" is handled by reusing process_camera_status_list.
+    - Every other component is treated like process_device_status's
+      per-component path AND has its per-camera breakdown (if any)
+      extracted onto the relevant Camera via
+      camera_monitor.update_camera_component_health.
+    """
+
+    # Imported here (rather than at module level) to avoid a circular
+    # import: camera_monitor.py doesn't import this module, but keeping
+    # the import local makes that one-directional dependency explicit.
+    from monitoring.services.camera_monitor import (
+        process_camera_status_list,
+        update_camera_component_health,
+    )
+
+    if received_at is None:
+        received_at = timezone.now()
+
+    heartbeat = record_heartbeat(device=device, payload=payload, received_at=received_at)
+
+    # A snapshot arriving at all proves the Edge is communicating.
     update_device_status(device=device, new_status=DeviceStatus.ONLINE)
 
     resolve_offline_alerts(device)
 
-    # Store complete health information.
+    raw_components = payload.get("components", {})
+
+    if not isinstance(raw_components, dict):
+        raw_components = {}
+
+    components = dict(raw_components)
+
+    # Never displayed as its own component -- see docstring above.
+    components.pop("edge-device", None)
+    cameras_component = components.pop("cameras", None)
+
     device.health_data = payload
 
-    # Extract component statuses
-
-    components = payload.get("components", {})
-
-    if not isinstance(components, dict):
-        components = {}
-
     component_statuses = {}
-
     unhealthy_components = []
 
     for component_name, component in components.items():
@@ -377,11 +513,13 @@ def process_device_health(
         if not is_component_healthy(status):
             unhealthy_components.append(component_name)
 
+        update_camera_component_health(
+            device=device, source=component_name, component_payload=component
+        )
+
     device.component_statuses = component_statuses
 
     device.save(update_fields=["health_data", "component_statuses", "updated_at"])
-
-    # Health alerts
 
     if unhealthy_components:
 
@@ -392,5 +530,13 @@ def process_device_health(
     else:
 
         resolve_health_alerts(device)
+
+    if isinstance(cameras_component, dict):
+        camera_list = cameras_component.get("cameras", [])
+
+        if isinstance(camera_list, list):
+            process_camera_status_list(
+                device=device, payload={"cameras": camera_list}, received_at=received_at
+            )
 
     return heartbeat

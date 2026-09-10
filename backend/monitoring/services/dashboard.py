@@ -8,7 +8,7 @@ drifted apart, which is why the dashboard behaved inconsistently. The view
 now just calls get_dashboard_data() below.
 """
 
-from django.db.models import Count, Q
+from django.db.models import Count, Prefetch, Q
 
 from cameras.models import Camera, CameraStatus
 from devices.models import Device, DeviceStatus
@@ -212,6 +212,13 @@ def get_devices_with_problems(limit=10):
     devices = (
         Device.objects.filter(active=True, device_type="EDGE")
         .select_related("location")
+        .prefetch_related(
+            Prefetch(
+                "alerts",
+                queryset=DeviceAlert.objects.filter(active=True),
+                to_attr="active_alerts_prefetched",
+            )
+        )
         .annotate(
             active_alert_count=Count(
                 "alerts", filter=Q(alerts__active=True), distinct=True
@@ -244,8 +251,11 @@ def get_devices_with_problems(limit=10):
         if unhealthy_components:
             issues.append("Unhealthy component(s): " + ", ".join(unhealthy_components))
 
-        if device.active_alert_count > 0:
-            issues.append(f"{device.active_alert_count} active alert(s)")
+        # The actual alert messages, not just a count -- this is what's
+        # shown on the dashboard, so it needs to say *what* is wrong, not
+        # just "N active alert(s)".
+        for alert in device.active_alerts_prefetched:
+            issues.append(alert.message)
 
         result.append(
             {

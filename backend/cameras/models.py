@@ -27,6 +27,26 @@ class Camera(TimeStampedModel):
 
     last_seen = models.DateTimeField(null=True, blank=True)
 
+    # Whether this camera showed up the last time the MQTT subscriber
+    # reconciled its known cameras against the broker (see
+    # monitoring/services/mqtt_reconciliation.py). Unlike `status`, this is
+    # never time-based -- it only flips to False when a full reconcile
+    # cycle genuinely didn't see this camera.
+    on_mqtt = models.BooleanField(default=True)
+
+    # Identity info reported on aiaction/.../info/cameras. Blank until
+    # that message arrives; only auto-filled while pending_review=True so
+    # a human's edits are never overwritten by MQTT traffic.
+    serial_number = models.CharField(max_length=100, blank=True, default="")
+    latitude = models.FloatField(null=True, blank=True)
+    longitude = models.FloatField(null=True, blank=True)
+
+    # Per-component breakdown for THIS camera specifically, extracted from
+    # the detectorapi/detector/idmr health messages (which report a dict
+    # keyed by "{camera_id}_ch{channel}"). E.g.:
+    #   {"detectorapi": {"stage": "idle", ...}, "detector": {"healthy": true, ...}}
+    health_data = models.JSONField(default=dict, blank=True)
+
     active = models.BooleanField(default=True)
 
     # True for cameras auto-created from an MQTT topic (the device's

@@ -300,3 +300,17 @@ export const dashboardApi = {
     return response.json();
   },
 };
+
+// Reads/writes backend/.env directly (see core/env_settings.py on the
+// backend). mqtt_password is write-only: omit it to leave it unchanged.
+export const settingsApi = {
+  get() {
+    return apiRequest("/settings/");
+  },
+  update(data) {
+    return apiRequest("/settings/", {
+      method: "PUT",
+      body: JSON.stringify(data),
+    });
+  },
+};

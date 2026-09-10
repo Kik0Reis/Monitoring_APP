@@ -20,6 +20,9 @@ class CameraSerializer(serializers.ModelSerializer):
     # navigation (Country -> Customer -> Location -> Device -> Camera).
     breadcrumb = serializers.SerializerMethodField()
 
+    # Recent alerts (active and resolved) for this camera, newest first.
+    alerts = serializers.SerializerMethodField()
+
     class Meta:
         model = Camera
 
@@ -33,8 +36,16 @@ class CameraSerializer(serializers.ModelSerializer):
             "channel",
             "status",
             "last_seen",
+            "on_mqtt",
+            "serial_number",
+            "latitude",
+            "longitude",
+            # Per-component (detectorapi/detector/idmr) breakdown for this
+            # specific camera, extracted from the device's health messages.
+            "health_data",
             "active",
             "breadcrumb",
+            "alerts",
             "pending_review",
             "created_at",
             "updated_at",
@@ -46,6 +57,12 @@ class CameraSerializer(serializers.ModelSerializer):
             "device_name",
             "status",
             "last_seen",
+            "on_mqtt",
+            "serial_number",
+            "latitude",
+            "longitude",
+            "health_data",
+            "alerts",
             "pending_review",
             "created_at",
             "updated_at",
@@ -88,6 +105,22 @@ class CameraSerializer(serializers.ModelSerializer):
                 "name": obj.name,
                 "path": f"/cameras/{obj.id}",
             },
+        ]
+
+    def get_alerts(self, obj):
+        # CameraAlert.Meta.ordering is already "-created_at", and the
+        # view prefetches "alerts" so this doesn't add an extra query.
+        return [
+            {
+                "id": alert.id,
+                "alert_type": alert.alert_type,
+                "severity": alert.severity,
+                "message": alert.message,
+                "active": alert.active,
+                "created_at": alert.created_at,
+                "resolved_at": alert.resolved_at,
+            }
+            for alert in list(obj.alerts.all())[:30]
         ]
 
     def validate_name(self, value):

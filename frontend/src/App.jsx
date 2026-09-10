@@ -15,6 +15,7 @@ import CustomerDetail from "./pages/CustomerDetail/CustomerDetail";
 import LocationDetail from "./pages/LocationDetail/LocationDetail";
 import DeviceDetail from "./pages/DeviceDetail/DeviceDetail";
 import CameraDetail from "./pages/CameraDetail/CameraDetail";
+import Settings from "./pages/Settings/Settings";
 
 import "./App.css";
 
@@ -42,6 +43,8 @@ function App() {
           <Route path="/cameras/:cameraId" element={<CameraDetail />} />
 
           <Route path="/alerts" element={<Alerts />} />
+
+          <Route path="/settings" element={<Settings />} />
         </Route>
       </Routes>
     </BrowserRouter>

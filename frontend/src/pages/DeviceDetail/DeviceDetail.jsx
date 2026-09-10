@@ -12,6 +12,8 @@ import DataTable from "../../components/common/DataTable";
 import FormField from "../../components/common/FormField";
 import StatusBadge from "../../components/common/StatusBadge";
 import PendingReviewBadge from "../../components/common/PendingReviewBadge";
+import NotOnMqttBadge from "../../components/common/NotOnMqttBadge";
+import ComponentCard, { formatTimestamp } from "../../components/common/ComponentCard";
 import CrudModal from "../../components/crud/CrudModal";
 
 const EMPTY_FORM = { name: "", camera_identifier: "", channel: 1, active: true };
@@ -28,86 +30,6 @@ const METRIC_LABELS = {
 
 function metricSuffix(key) {
   return key === "temperature" ? "°C" : "%";
-}
-
-function formatTimestamp(value) {
-  if (!value) return "—";
-  try {
-    return new Date(value).toLocaleString();
-  } catch {
-    return String(value);
-  }
-}
-
-/**
- * Renders one entry of device.component_statuses as a card. The MQTT
- * payload shape isn't fixed ahead of time (different component types
- * report different fields), so this walks the object generically:
- * scalars become detail rows, nested per-camera breakdowns become a
- * compact sub-list, and "status"/"timestamp" get pulled into the header.
- */
-function ComponentCard({ name, data }) {
-  if (!data || typeof data !== "object") {
-    return null;
-  }
-
-  const { status, timestamp, cameras, ...rest } = data;
-
-  const scalarEntries = Object.entries(rest).filter(
-    ([, value]) => value === null || typeof value !== "object"
-  );
-
-  const listEntries = Object.entries(rest).filter(
-    ([, value]) => Array.isArray(value) && value.length > 0
-  );
-
-  const cameraEntries = cameras && typeof cameras === "object" ? Object.entries(cameras) : [];
-
-  return (
-    <div className="component-card">
-      <div className="component-card-header">
-        <strong>{name.replace(/_/g, " ")}</strong>
-        <StatusBadge status={status} />
-      </div>
-
-      <div className="component-detail-list">
-        {timestamp && (
-          <div className="component-detail-row">
-            <span>Last update</span>
-            <strong>{formatTimestamp(timestamp)}</strong>
-          </div>
-        )}
-
-        {scalarEntries.map(([key, value]) => (
-          <div className="component-detail-row" key={key}>
-            <span>{key.replace(/_/g, " ")}</span>
-            <strong>{String(value)}</strong>
-          </div>
-        ))}
-
-        {listEntries.map(([key, value]) => (
-          <div className="component-detail-row" key={key}>
-            <span>{key.replace(/_/g, " ")}</span>
-            <strong>{value.length ? value.join(", ") : "none"}</strong>
-          </div>
-        ))}
-
-        {cameraEntries.map(([camId, camData]) => (
-          <div className="component-detail-row" key={camId}>
-            <span>{camId}</span>
-            <strong>
-              {camData?.stage ??
-                (camData?.healthy === true
-                  ? "healthy"
-                  : camData?.healthy === false
-                  ? "unhealthy"
-                  : "—")}
-            </strong>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
 }
 
 function DeviceDetail() {
@@ -175,6 +97,7 @@ function DeviceDetail() {
         <span className="entity-name">
           {row.name}
           {row.pending_review && <PendingReviewBadge />}
+          {!row.on_mqtt && <NotOnMqttBadge />}
         </span>
       ),
     },
@@ -246,12 +169,27 @@ function DeviceDetail() {
                 <h2>{device.name}</h2>
                 <StatusBadge status={device.status} />
                 {device.pending_review && <PendingReviewBadge />}
+                {!device.on_mqtt && <NotOnMqttBadge />}
               </div>
 
               <div className="detail-summary-meta">
                 <div className="detail-meta-item">
                   <span>Location</span>
                   <strong>{device.location?.name}</strong>
+                </div>
+                <div className="detail-meta-item">
+                  <span>Customer</span>
+                  <strong>
+                    {device.breadcrumb?.find((entry) => entry.type === "customer")
+                      ?.name ?? "—"}
+                  </strong>
+                </div>
+                <div className="detail-meta-item">
+                  <span>Country</span>
+                  <strong>
+                    {device.breadcrumb?.find((entry) => entry.type === "country")
+                      ?.name ?? "—"}
+                  </strong>
                 </div>
                 <div className="detail-meta-item">
                   <span>Serial Number</span>
@@ -277,6 +215,32 @@ function DeviceDetail() {
             </div>
           </div>
         </div>
+      )}
+
+      {device && device.alerts && device.alerts.length > 0 && (
+        <section className="detail-section">
+          <div className="detail-section-header">
+            <h3>Alerts</h3>
+          </div>
+
+          <div className="entity-alerts-list">
+            {device.alerts.map((alert) => (
+              <div
+                className={`entity-alert-row ${alert.active ? "active" : "resolved"}`}
+                key={alert.id}
+              >
+                <div className="entity-alert-main">
+                  <StatusBadge
+                    status={alert.active ? "warning" : "unknown"}
+                    label={alert.active ? "Active" : "Resolved"}
+                  />
+                  <span>{alert.message}</span>
+                </div>
+                <time>{formatTimestamp(alert.created_at)}</time>
+              </div>
+            ))}
+          </div>
+        </section>
       )}
 
       {heartbeat && heartbeatMetrics.length > 0 && (
@@ -312,6 +276,33 @@ function DeviceDetail() {
             {componentEntries.map(([name, data]) => (
               <ComponentCard key={name} name={name} data={data} />
             ))}
+          </div>
+        </section>
+      )}
+
+      {device?.system_info && Object.keys(device.system_info).length > 0 && (
+        <section className="detail-section">
+          <div className="detail-section-header">
+            <h3>System Info</h3>
+          </div>
+
+          <div className="component-grid">
+            <div className="component-card">
+              <div className="component-detail-list">
+                {Object.entries(device.system_info)
+                  .filter(([, value]) => value === null || typeof value !== "object")
+                  .map(([key, value]) => (
+                    <div className="component-detail-row" key={key}>
+                      <span>{key.replace(/_/g, " ")}</span>
+                      <strong>
+                        {value === null || value === undefined || value === ""
+                          ? "—"
+                          : String(value)}
+                      </strong>
+                    </div>
+                  ))}
+              </div>
+            </div>
           </div>
         </section>
       )}

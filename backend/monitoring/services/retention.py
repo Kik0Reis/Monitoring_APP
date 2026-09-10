@@ -17,7 +17,7 @@ import logging
 from django.conf import settings
 from django.utils import timezone
 
-from monitoring.models import DeviceHeartbeat
+from monitoring.models import CameraAlert, DeviceAlert, DeviceHeartbeat
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +64,50 @@ def delete_old_heartbeats(
     if total_deleted:
         logger.info(
             "Heartbeat cleanup: deleted %s heartbeat(s) older than %s days.",
+            total_deleted,
+            retention_days,
+        )
+
+    return total_deleted
+
+
+def delete_old_resolved_alerts(
+    retention_days: int | None = None, batch_size: int = DEFAULT_BATCH_SIZE
+) -> int:
+    """
+    Delete resolved DeviceAlert/CameraAlert rows (active=False) whose
+    resolved_at is older than `retention_days`. Active alerts are never
+    touched -- only resolved_at__lt=cutoff can match, and active alerts
+    always have resolved_at=None.
+    """
+
+    if retention_days is None:
+        retention_days = settings.ALERT_RETENTION_DAYS
+
+    cutoff = timezone.now() - timezone.timedelta(days=retention_days)
+
+    total_deleted = 0
+
+    for model in (DeviceAlert, CameraAlert):
+        while True:
+            stale_ids = list(
+                model.objects.filter(active=False, resolved_at__lt=cutoff)
+                .order_by("id")
+                .values_list("id", flat=True)[:batch_size]
+            )
+
+            if not stale_ids:
+                break
+
+            deleted_count, _ = model.objects.filter(id__in=stale_ids).delete()
+            total_deleted += deleted_count
+
+            if len(stale_ids) < batch_size:
+                break
+
+    if total_deleted:
+        logger.info(
+            "Alert cleanup: deleted %s resolved alert(s) older than %s days.",
             total_deleted,
             retention_days,
         )

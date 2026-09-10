@@ -38,6 +38,14 @@ class Device(TimeStampedModel):
 
     last_seen = models.DateTimeField(null=True, blank=True)
 
+    # Whether this device showed up the last time the MQTT subscriber
+    # reconciled its known devices against the broker (see
+    # monitoring/services/mqtt_reconciliation.py). Unlike `status`, this is
+    # never time-based -- it only flips to False when a full reconcile
+    # cycle genuinely didn't see this device, which is what lets a device
+    # be deleted with confidence after e.g. a bulk country delete.
+    on_mqtt = models.BooleanField(default=True)
+
     # Health of each internal service the Edge box runs, e.g.:
     #
     # {
@@ -48,6 +56,11 @@ class Device(TimeStampedModel):
     component_statuses = models.JSONField(default=dict, blank=True)
 
     health_data = models.JSONField(default=dict, blank=True)
+
+    # Hardware/system info reported on aiaction/.../info/edge-device, e.g.
+    # OS, CPU/RAM/GPU specs, IP address. Purely informational -- shown on
+    # the device detail page, never used for status/health logic.
+    system_info = models.JSONField(default=dict, blank=True)
 
     device_type = models.CharField(
         max_length=20,

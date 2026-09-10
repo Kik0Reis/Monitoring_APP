@@ -5,14 +5,18 @@ Mirrors monitoring/services/device_health.py, but for individual cameras
 rather than the Edge device they're attached to.
 """
 
+import logging
 from typing import Any
 
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from cameras.models import Camera, CameraStatus
 from monitoring.models import AlertSeverity, CameraAlert, CameraAlertType
+from mqtt import reconcile_state
 from mqtt.provisioning import resolve_camera
+
+logger = logging.getLogger(__name__)
 
 
 @transaction.atomic
@@ -182,9 +186,177 @@ def process_camera_status_list(
                 camera=camera, new_status=camera_status, received_at=received_at
             )
 
+            # Appearing in this list -- even reported as offline -- proves
+            # the device still knows about this camera and is reporting it
+            # over MQTT, which is what "on_mqtt" tracks.
+            reconcile_state.record_camera_seen(camera.id)
+
             processed += 1
 
     return processed
+
+
+@transaction.atomic
+def process_camera_info_list(
+    device, payload: dict[str, Any], received_at=None
+) -> int:
+    """
+    Process aiaction/.../info/cameras: identity info for every camera
+    attached to this device (serial number, friendly name, GPS
+    coordinates). Example payload:
+
+        {
+            "cameras": [
+                {
+                    "camera_id": "CAM-1",
+                    "camera_serial_number": "B8A44F957EC7",
+                    "name": "Test Camera",
+                    "latitude": null,
+                    "longitude": null
+                }
+            ]
+        }
+
+    Unlike the bulk status list, this never touches Camera.status -- it
+    only fills in identity fields, and only overwrites name/serial_number
+    while the camera is still pending_review, so a human's edits are
+    never clobbered by MQTT traffic. Coordinates are always refreshed
+    since they're telemetry, not something a human is expected to type in.
+    """
+
+    if received_at is None:
+        received_at = timezone.now()
+
+    cameras = payload.get("cameras", [])
+
+    if not isinstance(cameras, list):
+        return 0
+
+    processed = 0
+
+    for camera_data in cameras:
+
+        if not isinstance(camera_data, dict):
+            continue
+
+        camera_identifier = camera_data.get("camera_id")
+
+        if not camera_identifier:
+            continue
+
+        matching_cameras = get_cameras_by_identifier(
+            device=device, camera_identifier=camera_identifier
+        )
+
+        if not matching_cameras:
+            matching_cameras = [
+                resolve_camera(
+                    device=device,
+                    camera_identifier=camera_identifier,
+                    name=camera_data.get("name"),
+                )
+            ]
+
+        name = camera_data.get("name")
+        serial_number = camera_data.get("camera_serial_number")
+        latitude = camera_data.get("latitude")
+        longitude = camera_data.get("longitude")
+
+        for camera in matching_cameras:
+
+            update_fields = []
+
+            if camera.pending_review:
+
+                if name and camera.name != name:
+                    camera.name = name
+                    update_fields.append("name")
+
+                if serial_number and camera.serial_number != serial_number:
+                    camera.serial_number = serial_number
+                    update_fields.append("serial_number")
+
+            if latitude is not None and camera.latitude != latitude:
+                camera.latitude = latitude
+                update_fields.append("latitude")
+
+            if longitude is not None and camera.longitude != longitude:
+                camera.longitude = longitude
+                update_fields.append("longitude")
+
+            if update_fields:
+                update_fields.append("updated_at")
+
+                try:
+                    camera.save(update_fields=update_fields)
+                except IntegrityError:
+                    # The reported name collided with another camera's
+                    # name on this device (unique_camera_name_per_device)
+                    # -- skip the rename rather than crash MQTT processing.
+                    logger.warning(
+                        "Could not rename camera %s to '%s' from MQTT info: "
+                        "name already in use on this device.",
+                        camera,
+                        name,
+                    )
+
+            reconcile_state.record_camera_seen(camera.id)
+
+            processed += 1
+
+    return processed
+
+
+def update_camera_component_health(
+    device, source: str, component_payload: dict[str, Any]
+) -> int:
+    """
+    Extract this component's per-camera breakdown (if any) and store it
+    on the relevant Camera(s), so the camera detail page can show real
+    detectorapi/detector/idmr status for that specific camera instead of
+    only the device-wide summary.
+
+    detectorapi/detector/idmr health payloads report a "cameras" dict
+    keyed by "{camera_id}_ch{channel}", e.g.:
+
+        {"cameras": {"CAM-1_ch1": {"stage": "idle", "error": null}}}
+
+    Not every component has this (e.g. "edge-device" doesn't), so this is
+    a harmless no-op when "cameras" is missing or not a dict.
+    """
+
+    cameras_data = component_payload.get("cameras")
+
+    if not isinstance(cameras_data, dict):
+        return 0
+
+    updated = 0
+
+    for key, data in cameras_data.items():
+
+        if not isinstance(data, dict) or "_ch" not in key:
+            continue
+
+        camera_identifier, _, channel_part = key.rpartition("_ch")
+
+        if not camera_identifier or not channel_part.isdigit():
+            continue
+
+        camera = Camera.objects.filter(
+            device=device, camera_identifier=camera_identifier, channel=int(channel_part)
+        ).first()
+
+        if camera is None:
+            continue
+
+        health_data = dict(camera.health_data or {})
+        health_data[source] = data
+        camera.health_data = health_data
+        camera.save(update_fields=["health_data", "updated_at"])
+
+        updated += 1
+
+    return updated
 
 
 def create_camera_alert(
@@ -295,3 +467,19 @@ def process_camera_error(
         payload=payload,
         severity=AlertSeverity.WARNING,
     )
+
+
+@transaction.atomic
+def process_camera_detection(
+    camera: Camera, payload: dict[str, Any], received_at=None
+) -> CameraAlert:
+    """
+    Process aiaction/.../detections/{camera_id}/{channel}: a specific
+    camera detected something (smoke, person, etc). This is the direct
+    replacement for the old per-camera "alert" topic -- the separate old
+    "event"/"error" topics were folded into this single "detections"
+    topic in the new scheme, so every message here is treated as a
+    detection.
+    """
+
+    return process_camera_alert(camera=camera, payload=payload, received_at=received_at)

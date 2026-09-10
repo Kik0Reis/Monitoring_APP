@@ -15,7 +15,7 @@ class CameraViewSet(viewsets.ModelViewSet):
         "device__location",
         "device__location__customer",
         "device__location__customer__country",
-    )
+    ).prefetch_related("alerts")
 
     serializer_class = CameraSerializer
 
