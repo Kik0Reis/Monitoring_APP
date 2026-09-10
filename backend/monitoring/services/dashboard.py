@@ -180,6 +180,21 @@ def _serialize_camera_alerts(camera_alerts):
 # frontend dashboard can link straight to the offending device.
 
 
+# Short, human-friendly labels for the "Devices with problems" dashboard
+# panel. Alert.message can be an arbitrarily long string (e.g. DEVICE_ERROR
+# messages come straight from whatever text the edge device sent over
+# MQTT), which looks broken crammed into a single dashboard row. The full
+# message is still shown on the device detail page -- this is only for the
+# compact dashboard summary.
+ALERT_TYPE_SHORT_LABELS = {
+    "DEVICE_OFFLINE": "Offline",
+    "DEVICE_HEALTH": "Health issue",
+    "DEVICE_ERROR": "Error",
+    "MQTT_ERROR": "MQTT error",
+    "SYSTEM_ERROR": "System error",
+}
+
+
 def _device_has_component_problem(device):
     """Return the names of any unhealthy internal components on this device."""
 
@@ -251,11 +266,13 @@ def get_devices_with_problems(limit=10):
         if unhealthy_components:
             issues.append("Unhealthy component(s): " + ", ".join(unhealthy_components))
 
-        # The actual alert messages, not just a count -- this is what's
-        # shown on the dashboard, so it needs to say *what* is wrong, not
-        # just "N active alert(s)".
+        # A short label per alert type, not just a count and not the raw
+        # alert.message (which can be a long, arbitrary string) -- this
+        # needs to say *what kind* of thing is wrong at a glance, without
+        # overflowing the dashboard row. The full message is available on
+        # the device detail page.
         for alert in device.active_alerts_prefetched:
-            issues.append(alert.message)
+            issues.append(ALERT_TYPE_SHORT_LABELS.get(alert.alert_type, "Error"))
 
         result.append(
             {

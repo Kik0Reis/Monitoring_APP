@@ -9,7 +9,6 @@ import Devices from "./pages/Devices/Devices";
 import Cameras from "./pages/Cameras/Cameras";
 import Alerts from "./pages/Alerts/Alerts";
 
-// Drilldown detail pages: Country -> Clients -> Locations -> Devices -> Cameras
 import CountryDetail from "./pages/CountryDetail/CountryDetail";
 import CustomerDetail from "./pages/CustomerDetail/CustomerDetail";
 import LocationDetail from "./pages/LocationDetail/LocationDetail";

@@ -218,28 +218,24 @@ function DeviceDetail() {
         </div>
       )}
 
-      {device && device.alerts && device.alerts.length > 0 && (
+      {device && device.alerts && device.alerts.some((alert) => alert.active) && (
         <section className="detail-section">
           <div className="detail-section-header">
             <h3>Alerts</h3>
           </div>
 
           <div className="entity-alerts-list">
-            {device.alerts.map((alert) => (
-              <div
-                className={`entity-alert-row ${alert.active ? "active" : "resolved"}`}
-                key={alert.id}
-              >
-                <div className="entity-alert-main">
-                  <StatusBadge
-                    status={alert.active ? "warning" : "unknown"}
-                    label={alert.active ? "Active" : "Resolved"}
-                  />
-                  <span>{alert.message}</span>
+            {device.alerts
+              .filter((alert) => alert.active)
+              .map((alert) => (
+                <div className="entity-alert-row active" key={alert.id}>
+                  <div className="entity-alert-main">
+                    <StatusBadge status="warning" label="Active" />
+                    <span>{alert.message}</span>
+                  </div>
+                  <time>{formatTimestamp(alert.created_at)}</time>
                 </div>
-                <time>{formatTimestamp(alert.created_at)}</time>
-              </div>
-            ))}
+              ))}
           </div>
         </section>
       )}

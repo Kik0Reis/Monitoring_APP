@@ -11,7 +11,7 @@ import FormField from "../../components/common/FormField";
 import StatusBadge from "../../components/common/StatusBadge";
 import PendingReviewBadge from "../../components/common/PendingReviewBadge";
 import NotOnMqttBadge from "../../components/common/NotOnMqttBadge";
-import ComponentCard, { formatTimestamp } from "../../components/common/ComponentCard";
+import { formatTimestamp } from "../../components/common/ComponentCard";
 
 import CrudModal from "../../components/crud/CrudModal";
 
@@ -177,42 +177,24 @@ function CameraDetail() {
         </div>
       )}
 
-      {camera && camera.alerts && camera.alerts.length > 0 && (
+      {camera && camera.alerts && camera.alerts.some((alert) => alert.active) && (
         <section className="detail-section">
           <div className="detail-section-header">
             <h3>Alerts</h3>
           </div>
 
           <div className="entity-alerts-list">
-            {camera.alerts.map((alert) => (
-              <div
-                className={`entity-alert-row ${alert.active ? "active" : "resolved"}`}
-                key={alert.id}
-              >
-                <div className="entity-alert-main">
-                  <StatusBadge
-                    status={alert.active ? "warning" : "unknown"}
-                    label={alert.active ? "Active" : "Resolved"}
-                  />
-                  <span>{alert.message}</span>
+            {camera.alerts
+              .filter((alert) => alert.active)
+              .map((alert) => (
+                <div className="entity-alert-row active" key={alert.id}>
+                  <div className="entity-alert-main">
+                    <StatusBadge status="warning" label="Active" />
+                    <span>{alert.message}</span>
+                  </div>
+                  <time>{formatTimestamp(alert.created_at)}</time>
                 </div>
-                <time>{formatTimestamp(alert.created_at)}</time>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {camera && camera.health_data && Object.keys(camera.health_data).length > 0 && (
-        <section className="detail-section">
-          <div className="detail-section-header">
-            <h3>Component Health</h3>
-          </div>
-
-          <div className="component-grid">
-            {Object.entries(camera.health_data).map(([name, data]) => (
-              <ComponentCard key={name} name={name} data={data} />
-            ))}
+              ))}
           </div>
         </section>
       )}
