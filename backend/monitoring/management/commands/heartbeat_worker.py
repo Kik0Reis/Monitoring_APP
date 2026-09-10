@@ -8,7 +8,7 @@ from monitoring.services.heartbeat_monitor import (
     DEFAULT_HEARTBEAT_TIMEOUT_SECONDS,
     check_all_heartbeats,
 )
-from monitoring.services.retention import delete_old_heartbeats
+from monitoring.services.retention import delete_old_heartbeats, delete_old_resolved_alerts
 
 
 class Command(BaseCommand):
@@ -45,7 +45,8 @@ class Command(BaseCommand):
                 f"Heartbeat worker started: timeout={timeout_seconds}s, "
                 f"interval={interval_seconds}s, "
                 f"cleanup every {options['cleanup_interval_hours']}h "
-                f"(keeping {settings.HEARTBEAT_RETENTION_DAYS} days of history)"
+                f"(keeping {settings.HEARTBEAT_RETENTION_DAYS} days of heartbeats, "
+                f"{settings.ALERT_RETENTION_DAYS} days of resolved alerts)"
             )
         )
 
@@ -66,13 +67,23 @@ class Command(BaseCommand):
             )
 
             if timezone.now() >= next_cleanup_at:
-                deleted_count = delete_old_heartbeats()
+                deleted_heartbeats = delete_old_heartbeats()
 
-                if deleted_count:
+                if deleted_heartbeats:
                     self.stdout.write(
                         self.style.SUCCESS(
-                            f"Heartbeat cleanup: removed {deleted_count} "
+                            f"Heartbeat cleanup: removed {deleted_heartbeats} "
                             "old heartbeat(s)."
+                        )
+                    )
+
+                deleted_alerts = delete_old_resolved_alerts()
+
+                if deleted_alerts:
+                    self.stdout.write(
+                        self.style.SUCCESS(
+                            f"Alert cleanup: removed {deleted_alerts} "
+                            "old resolved alert(s)."
                         )
                     )
 

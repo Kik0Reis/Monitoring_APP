@@ -159,6 +159,9 @@ function Alerts() {
           onClick={() => setTab("detections")}
         >
           Detections
+          {detections.length > 0 && (
+            <span className="alerts-tab-count">{detections.length}</span>
+          )}
         </button>
       </div>
 

@@ -52,6 +52,8 @@
   color: white;
   font-size: var(--text-xs);
   font-weight: var(--weight-bold);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
 }
 
 .alerts-tab.active .alerts-tab-count {

@@ -26,7 +26,7 @@ class DeviceHeartbeat(models.Model):
     temperature = models.FloatField(null=True, blank=True)
 
     # The full MQTT payload, kept as-is. Health messages carry nested
-    # per-component info (aiaction_edge, detector, idmr, requests, ...)
+    # per-component info (edge-device, detector, idmr, detectorapi, ...)
     # that isn't worth its own column until we know what the dashboard
     # actually needs from it.
     raw_payload = models.JSONField(default=dict)

@@ -12,6 +12,7 @@ import DataTable from "../../components/common/DataTable";
 import FormField from "../../components/common/FormField";
 import StatusBadge from "../../components/common/StatusBadge";
 import PendingReviewBadge from "../../components/common/PendingReviewBadge";
+import NotOnMqttBadge from "../../components/common/NotOnMqttBadge";
 import CrudModal from "../../components/crud/CrudModal";
 
 const EMPTY_FORM = { name: "", camera_identifier: "", channel: 1, active: true };
@@ -175,6 +176,7 @@ function DeviceDetail() {
         <span className="entity-name">
           {row.name}
           {row.pending_review && <PendingReviewBadge />}
+          {!row.on_mqtt && <NotOnMqttBadge />}
         </span>
       ),
     },
@@ -246,12 +248,27 @@ function DeviceDetail() {
                 <h2>{device.name}</h2>
                 <StatusBadge status={device.status} />
                 {device.pending_review && <PendingReviewBadge />}
+                {!device.on_mqtt && <NotOnMqttBadge />}
               </div>
 
               <div className="detail-summary-meta">
                 <div className="detail-meta-item">
                   <span>Location</span>
                   <strong>{device.location?.name}</strong>
+                </div>
+                <div className="detail-meta-item">
+                  <span>Customer</span>
+                  <strong>
+                    {device.breadcrumb?.find((entry) => entry.type === "customer")
+                      ?.name ?? "—"}
+                  </strong>
+                </div>
+                <div className="detail-meta-item">
+                  <span>Country</span>
+                  <strong>
+                    {device.breadcrumb?.find((entry) => entry.type === "country")
+                      ?.name ?? "—"}
+                  </strong>
                 </div>
                 <div className="detail-meta-item">
                   <span>Serial Number</span>
@@ -312,6 +329,33 @@ function DeviceDetail() {
             {componentEntries.map(([name, data]) => (
               <ComponentCard key={name} name={name} data={data} />
             ))}
+          </div>
+        </section>
+      )}
+
+      {device?.system_info && Object.keys(device.system_info).length > 0 && (
+        <section className="detail-section">
+          <div className="detail-section-header">
+            <h3>System Info</h3>
+          </div>
+
+          <div className="component-grid">
+            <div className="component-card">
+              <div className="component-detail-list">
+                {Object.entries(device.system_info)
+                  .filter(([, value]) => value === null || typeof value !== "object")
+                  .map(([key, value]) => (
+                    <div className="component-detail-row" key={key}>
+                      <span>{key.replace(/_/g, " ")}</span>
+                      <strong>
+                        {value === null || value === undefined || value === ""
+                          ? "—"
+                          : String(value)}
+                      </strong>
+                    </div>
+                  ))}
+              </div>
+            </div>
           </div>
         </section>
       )}

@@ -201,17 +201,18 @@ def process_device_status(
     received_at=None,
 ) -> Device:
     """
-    Process a status/{source} MQTT message.
+    Process a health/{source} MQTT message.
 
     Important distinction:
 
-        status/detectorapi
-        status/detector
-        status/idmr
+        health/detectorapi
+        health/detector
+        health/idmr
+        (or any other health/{component} topic)
 
     are component statuses.
 
-        status/aiaction-edge
+        health/edge-device
 
     represents the actual Edge MQTT connection/LWT status.
     """
@@ -223,9 +224,9 @@ def process_device_status(
 
     # Actual Edge status
     #
-    # status/aiaction-edge
+    # health/edge-device
 
-    if source == "aiaction-edge":
+    if source == "edge-device":
 
         if status == "online":
             update_last_seen(device=device, received_at=received_at)
@@ -330,40 +331,133 @@ def process_component_health_alerts(device: Device) -> None:
 
 
 @transaction.atomic
-def process_device_health(
-    device: Device, payload: dict[str, Any], received_at=None
-) -> DeviceHeartbeat:
+def process_device_info(device: Device, payload: dict[str, Any], received_at=None) -> Device:
     """
-    Process a full "health" MQTT message: log the heartbeat, mark the
-    Edge online, and update every component's status from the payload's
-    "components" block, raising or clearing a health alert as needed.
+    Process aiaction/.../info/edge-device: hardware/system info about the
+    Edge box itself (OS, CPU, RAM, GPU, IP address, ...). Stored as-is in
+    Device.system_info for display on the device detail page. This never
+    touches Device.name/serial_number -- those stay whatever a human set
+    them to (or the MQTT-provisioned placeholder, until a human confirms
+    them).
     """
 
     if received_at is None:
         received_at = timezone.now()
 
-    heartbeat = record_heartbeat(
-        device=device, payload=payload, received_at=received_at
+    device.system_info = payload
+
+    device.save(update_fields=["system_info", "updated_at"])
+
+    update_last_seen(device=device, received_at=received_at)
+
+    # Receiving system info is still communication from the Edge.
+    if device.status == DeviceStatus.OFFLINE:
+        update_device_status(device=device, new_status=DeviceStatus.ONLINE)
+        resolve_offline_alerts(device)
+
+    return device
+
+
+def create_device_issue_alert(
+    device: Device, issue_name: str, payload: dict[str, Any]
+) -> DeviceAlert:
+    """
+    Raise a DEVICE_ERROR alert for a named issue reported on
+    aiaction/.../issues/{issue_name}, reusing the existing active alert
+    for that same issue_name instead of duplicating it.
+    """
+
+    existing_alerts = DeviceAlert.objects.filter(
+        device=device, alert_type=AlertType.DEVICE_ERROR, active=True
     )
 
-    # A health message proves the Edge is communicating.
+    for alert in existing_alerts:
+        if alert.raw_payload.get("issue_name") == issue_name:
+            return alert
+
+    message = (
+        payload.get("message")
+        or payload.get("description")
+        or f"Device '{device.name}' reported issue: {issue_name}."
+    )
+
+    stored_payload = dict(payload)
+    stored_payload["issue_name"] = issue_name
+
+    return DeviceAlert.objects.create(
+        device=device,
+        alert_type=AlertType.DEVICE_ERROR,
+        severity=AlertSeverity.WARNING,
+        message=message,
+        raw_payload=stored_payload,
+    )
+
+
+@transaction.atomic
+def process_device_issue(
+    device: Device, issue_name: str, payload: dict[str, Any], received_at=None
+) -> DeviceAlert:
+    """Process aiaction/.../issues/{issue_name}: a named problem reported by the Edge."""
+
+    if received_at is None:
+        received_at = timezone.now()
+
+    update_last_seen(device=device, received_at=received_at)
+
+    # An issue report is still communication from the Edge.
+    if device.status == DeviceStatus.OFFLINE:
+        update_device_status(device=device, new_status=DeviceStatus.ONLINE)
+        resolve_offline_alerts(device)
+
+    return create_device_issue_alert(device=device, issue_name=issue_name, payload=payload)
+
+
+@transaction.atomic
+def process_overall_health(
+    device: Device, payload: dict[str, Any], received_at=None
+) -> DeviceHeartbeat:
+    """
+    Process aiaction/.../health/overall-health: the combined snapshot that
+    replaced the old plain "health" topic. Its "components" block nests
+    the Edge's own status and the full camera list alongside the usual
+    detectorapi/detector/idmr component statuses, so this pulls those two
+    out for their own handling (edge-device -> proves the Edge is online;
+    cameras -> reuses process_camera_status_list) and treats everything
+    else exactly like process_device_status's per-component path.
+    """
+
+    # Imported here (rather than at module level) to avoid a circular
+    # import: camera_monitor.py doesn't import this module, but keeping
+    # the import local makes that one-directional dependency explicit.
+    from monitoring.services.camera_monitor import process_camera_status_list
+
+    if received_at is None:
+        received_at = timezone.now()
+
+    heartbeat = record_heartbeat(device=device, payload=payload, received_at=received_at)
+
+    # A snapshot arriving at all proves the Edge is communicating.
     update_device_status(device=device, new_status=DeviceStatus.ONLINE)
 
     resolve_offline_alerts(device)
 
-    # Store complete health information.
+    raw_components = payload.get("components", {})
+
+    if not isinstance(raw_components, dict):
+        raw_components = {}
+
+    components = dict(raw_components)
+
+    edge_device_component = components.pop("edge-device", None)
+    cameras_component = components.pop("cameras", None)
+
     device.health_data = payload
 
-    # Extract component statuses
-
-    components = payload.get("components", {})
-
-    if not isinstance(components, dict):
-        components = {}
-
     component_statuses = {}
-
     unhealthy_components = []
+
+    if isinstance(edge_device_component, dict):
+        component_statuses["edge-device"] = edge_device_component
 
     for component_name, component in components.items():
 
@@ -381,8 +475,6 @@ def process_device_health(
 
     device.save(update_fields=["health_data", "component_statuses", "updated_at"])
 
-    # Health alerts
-
     if unhealthy_components:
 
         create_health_alert(
@@ -392,5 +484,13 @@ def process_device_health(
     else:
 
         resolve_health_alerts(device)
+
+    if isinstance(cameras_component, dict):
+        camera_list = cameras_component.get("cameras", [])
+
+        if isinstance(camera_list, list):
+            process_camera_status_list(
+                device=device, payload={"cameras": camera_list}, received_at=received_at
+            )
 
     return heartbeat

@@ -3,8 +3,9 @@
  * object instead of hand-written markup repeated on every page.
  *
  * field: {
- *   name, label, type: 'text'|'textarea'|'select'|'checkbox',
- *   placeholder, options?: [{value, label}], maxLength?, hidden?
+ *   name, label, type: 'text'|'textarea'|'select'|'checkbox'|'number'|'password',
+ *   placeholder, options?: [{value, label}], maxLength?, min?, max?, hidden?,
+ *   hint? (short note rendered under the field, e.g. "Restart X to apply")
  * }
  */
 function FormField({ field, value, onChange, disabled }) {
@@ -13,6 +14,8 @@ function FormField({ field, value, onChange, disabled }) {
   }
 
   const id = `field-${field.name}`;
+
+  const hint = field.hint ? <p className="form-field-hint">{field.hint}</p> : null;
 
   if (field.type === "checkbox") {
     return (
@@ -28,6 +31,7 @@ function FormField({ field, value, onChange, disabled }) {
           />
           {field.label}
         </label>
+        {hint}
       </div>
     );
   }
@@ -50,6 +54,7 @@ function FormField({ field, value, onChange, disabled }) {
             </option>
           ))}
         </select>
+        {hint}
       </div>
     );
   }
@@ -67,6 +72,27 @@ function FormField({ field, value, onChange, disabled }) {
           disabled={disabled}
           rows={3}
         />
+        {hint}
+      </div>
+    );
+  }
+
+  if (field.type === "number") {
+    return (
+      <div className="form-field">
+        <label htmlFor={id}>{field.label}</label>
+        <input
+          id={id}
+          name={field.name}
+          type="number"
+          value={value ?? ""}
+          onChange={onChange}
+          placeholder={field.placeholder}
+          min={field.min}
+          max={field.max}
+          disabled={disabled}
+        />
+        {hint}
       </div>
     );
   }
@@ -77,13 +103,15 @@ function FormField({ field, value, onChange, disabled }) {
       <input
         id={id}
         name={field.name}
-        type="text"
+        type={field.type === "password" ? "password" : "text"}
         value={value ?? ""}
         onChange={onChange}
         placeholder={field.placeholder}
         maxLength={field.maxLength}
         disabled={disabled}
+        autoComplete={field.type === "password" ? "new-password" : undefined}
       />
+      {hint}
     </div>
   );
 }

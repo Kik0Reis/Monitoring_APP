@@ -13,6 +13,7 @@ import Pagination from "../../components/common/Pagination";
 import FormField from "../../components/common/FormField";
 import StatusBadge from "../../components/common/StatusBadge";
 import PendingReviewBadge from "../../components/common/PendingReviewBadge";
+import NotOnMqttBadge from "../../components/common/NotOnMqttBadge";
 import CrudModal from "../../components/crud/CrudModal";
 
 import "./Devices.css";
@@ -93,13 +94,23 @@ function Devices() {
     {
       key: "name",
       header: "Name",
-      render: (row) => (
-        <span className="entity-name">
-          {row.name}
-          {row.pending_review && <PendingReviewBadge />}
-          <span className="entity-subtext">{row.location?.name}</span>
-        </span>
-      ),
+      render: (row) => {
+        const customer = row.breadcrumb?.find((entry) => entry.type === "customer");
+        const country = row.breadcrumb?.find((entry) => entry.type === "country");
+
+        return (
+          <span className="entity-name">
+            {row.name}
+            {row.pending_review && <PendingReviewBadge />}
+            {!row.on_mqtt && <NotOnMqttBadge />}
+            <span className="entity-subtext">
+              {row.location?.name}
+              {customer && ` · ${customer.name}`}
+              {country && ` · ${country.name}`}
+            </span>
+          </span>
+        );
+      },
     },
     {
       key: "status",

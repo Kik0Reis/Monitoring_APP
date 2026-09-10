@@ -10,6 +10,7 @@ import Breadcrumbs from "../../components/common/Breadcrumbs";
 import FormField from "../../components/common/FormField";
 import StatusBadge from "../../components/common/StatusBadge";
 import PendingReviewBadge from "../../components/common/PendingReviewBadge";
+import NotOnMqttBadge from "../../components/common/NotOnMqttBadge";
 import CrudModal from "../../components/crud/CrudModal";
 
 function formatTimestamp(value) {
@@ -133,6 +134,7 @@ function CameraDetail() {
                 <h2>{camera.name}</h2>
                 <StatusBadge status={camera.status} />
                 {camera.pending_review && <PendingReviewBadge />}
+                {!camera.on_mqtt && <NotOnMqttBadge />}
               </div>
 
               <div className="detail-summary-meta">
@@ -154,6 +156,20 @@ function CameraDetail() {
                   <span>Camera Identifier</span>
                   <strong>{camera.camera_identifier}</strong>
                 </div>
+                {camera.serial_number && (
+                  <div className="detail-meta-item">
+                    <span>Serial Number</span>
+                    <strong>{camera.serial_number}</strong>
+                  </div>
+                )}
+                {(camera.latitude !== null && camera.latitude !== undefined) && (
+                  <div className="detail-meta-item">
+                    <span>Coordinates</span>
+                    <strong>
+                      {camera.latitude}, {camera.longitude}
+                    </strong>
+                  </div>
+                )}
                 <div className="detail-meta-item">
                   <span>Last Seen</span>
                   <strong>{formatTimestamp(camera.last_seen)}</strong>

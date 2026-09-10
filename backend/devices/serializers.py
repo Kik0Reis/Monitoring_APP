@@ -57,12 +57,16 @@ class DeviceSerializer(serializers.ModelSerializer):
             "device_type",
             "status",
             "last_seen",
+            "on_mqtt",
             "active",
             # Full internal component breakdown (detectorapi, detector,
             # idmr, ...) reported by the Edge device over MQTT.
             "component_statuses",
             # Raw payload of the most recent health message.
             "health_data",
+            # Hardware/system info reported on info/edge-device (OS, CPU,
+            # RAM, GPU, IP address, ...). Purely informational.
+            "system_info",
             "latest_heartbeat",
             "cameras_count",
             "breadcrumb",
@@ -76,8 +80,10 @@ class DeviceSerializer(serializers.ModelSerializer):
             "device_type",
             "status",
             "last_seen",
+            "on_mqtt",
             "component_statuses",
             "health_data",
+            "system_info",
             "pending_review",
             "created_at",
             "updated_at",

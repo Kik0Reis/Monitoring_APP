@@ -7,6 +7,7 @@ import {
   Cpu,
   Camera,
   Bell,
+  Settings,
 } from "lucide-react";
 
 function Sidebar() {
@@ -18,6 +19,7 @@ function Sidebar() {
     { label: "Devices", path: "/devices", icon: Cpu },
     { label: "Cameras", path: "/cameras", icon: Camera },
     { label: "Alerts", path: "/alerts", icon: Bell },
+    { label: "Settings", path: "/settings", icon: Settings },
   ];
 
   return (

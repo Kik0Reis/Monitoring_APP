@@ -30,7 +30,7 @@ from monitoring.models import (
     DeviceAlert,
     DeviceHeartbeat,
 )
-from monitoring.services.device_health import process_device_health
+from monitoring.services.device_health import process_overall_health
 from monitoring.services.heartbeat_monitor import (
     check_all_heartbeats,
     check_camera_timeout,
@@ -244,7 +244,7 @@ class CameraHeartbeatTimeoutTests(TestCase):
 
 class DeviceHealthServiceTests(TestCase):
     """
-    Tests for process_device_health().
+    Tests for process_overall_health().
     """
 
     @classmethod
@@ -289,7 +289,7 @@ class DeviceHealthServiceTests(TestCase):
             "source": "aiaction",
             "ttl_seconds": 60,
             "components": {
-                "aiaction_edge": {"status": "up"},
+                "edge-device": {"status": "online"},
                 "detector": {"status": "up", "latency_ms": 42},
                 "idmr": {"status": "up", "latency_ms": 31},
                 "requests": {"status": "up"},
@@ -312,7 +312,7 @@ class DeviceHealthServiceTests(TestCase):
 
         payload = self.healthy_payload()
 
-        process_device_health(
+        process_overall_health(
             device=self.device, payload=payload, received_at=received_at
         )
 
@@ -358,7 +358,7 @@ class DeviceHealthServiceTests(TestCase):
         # Simulate the detector becoming unhealthy.
         payload["components"]["detector"]["status"] = "down"
 
-        process_device_health(
+        process_overall_health(
             device=self.device, payload=payload, received_at=received_at
         )
 
@@ -405,7 +405,7 @@ class DeviceHealthServiceTests(TestCase):
 
         unhealthy_payload["components"]["detector"]["status"] = "down"
 
-        process_device_health(device=self.device, payload=unhealthy_payload)
+        process_overall_health(device=self.device, payload=unhealthy_payload)
 
         # Verify that the alert was created.
         alert = DeviceAlert.objects.get(
@@ -421,7 +421,7 @@ class DeviceHealthServiceTests(TestCase):
 
         healthy_payload = self.healthy_payload()
 
-        process_device_health(device=self.device, payload=healthy_payload)
+        process_overall_health(device=self.device, payload=healthy_payload)
 
         self.device.refresh_from_db()
 
