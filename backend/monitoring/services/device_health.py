@@ -352,6 +352,9 @@ def process_device_info(device: Device, payload: dict[str, Any], received_at=Non
     device is still pending_review, this replaces the auto-generated
     "AUTO-..." placeholder serial number with it, the same way camera
     identity fields are only auto-filled before a human confirms them.
+    This never touches Device.name/serial_number after they have been
+    confirmed by a human.
+
     """
 
     if received_at is None:
@@ -381,6 +384,7 @@ def process_device_info(device: Device, payload: dict[str, Any], received_at=Non
         )
         device.serial_number = Device.objects.get(pk=device.pk).serial_number
         device.save(update_fields=["system_info", "updated_at"])
+
 
     update_last_seen(device=device, received_at=received_at)
 
@@ -465,6 +469,7 @@ def process_overall_health(
       per-component path AND has its per-camera breakdown (if any)
       extracted onto the relevant Camera via
       camera_monitor.update_camera_component_health.
+
     """
 
     # Imported here (rather than at module level) to avoid a circular
@@ -474,6 +479,7 @@ def process_overall_health(
         process_camera_status_list,
         update_camera_component_health,
     )
+
 
     if received_at is None:
         received_at = timezone.now()
@@ -494,12 +500,16 @@ def process_overall_health(
 
     # Never displayed as its own component -- see docstring above.
     components.pop("edge-device", None)
+
     cameras_component = components.pop("cameras", None)
 
     device.health_data = payload
 
     component_statuses = {}
     unhealthy_components = []
+
+    if isinstance(edge_device_component, dict):
+        component_statuses["edge-device"] = edge_device_component
 
     for component_name, component in components.items():
 

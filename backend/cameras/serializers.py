@@ -43,6 +43,7 @@ class CameraSerializer(serializers.ModelSerializer):
             # Per-component (detectorapi/detector/idmr) breakdown for this
             # specific camera, extracted from the device's health messages.
             "health_data",
+
             "active",
             "breadcrumb",
             "alerts",
@@ -63,6 +64,7 @@ class CameraSerializer(serializers.ModelSerializer):
             "longitude",
             "health_data",
             "alerts",
+
             "pending_review",
             "created_at",
             "updated_at",

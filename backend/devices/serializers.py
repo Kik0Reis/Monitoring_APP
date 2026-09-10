@@ -91,6 +91,7 @@ class DeviceSerializer(serializers.ModelSerializer):
             "health_data",
             "system_info",
             "alerts",
+
             "pending_review",
             "created_at",
             "updated_at",

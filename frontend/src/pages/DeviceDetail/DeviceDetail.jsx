@@ -14,6 +14,7 @@ import StatusBadge from "../../components/common/StatusBadge";
 import PendingReviewBadge from "../../components/common/PendingReviewBadge";
 import NotOnMqttBadge from "../../components/common/NotOnMqttBadge";
 import ComponentCard, { formatTimestamp } from "../../components/common/ComponentCard";
+
 import CrudModal from "../../components/crud/CrudModal";
 
 const EMPTY_FORM = { name: "", camera_identifier: "", channel: 1, active: true };
