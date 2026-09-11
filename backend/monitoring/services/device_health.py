@@ -508,9 +508,6 @@ def process_overall_health(
     component_statuses = {}
     unhealthy_components = []
 
-    if isinstance(edge_device_component, dict):
-        component_statuses["edge-device"] = edge_device_component
-
     for component_name, component in components.items():
 
         if not isinstance(component, dict):
