@@ -1,15 +1,10 @@
-"""
-In-memory tracking of which devices/cameras have been seen on MQTT during
-the current reconciliation window.
+"""In-memory record of which devices/cameras were seen on MQTT this reconciliation window.
 
-Deliberately kept free of Django model/app imports -- it's just a
-thread-safe scratch pad that the subscriber writes to (from the paho
-network thread) as messages arrive, and that
-monitoring/services/mqtt_reconciliation.py reads from once a window
-closes. Splitting it out this way avoids a circular import between the
-mqtt and monitoring apps, which already import from each other elsewhere
-(mqtt/service.py -> monitoring services, monitoring/services/
-camera_monitor.py -> mqtt/provisioning.py).
+No Django imports on purpose -- just a thread-safe scratch pad the paho
+network thread writes to as messages arrive, read by
+monitoring/services/mqtt_reconciliation.py once a window closes. Kept
+separate to avoid a circular import (mqtt and monitoring already import
+from each other elsewhere).
 """
 
 import threading

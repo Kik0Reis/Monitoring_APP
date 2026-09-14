@@ -1,20 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 /**
- * Runs `loader` immediately, then again every `intervalMs`.
+ * Runs `loader` immediately, then every `intervalMs` (default 60s) -- this
+ * is what keeps pages "live" without the user hitting reload.
  *
- * This is what keeps the whole app "live": every page that shows data
- * pulled from the API uses this hook so it refreshes itself automatically
- * (default: every 60 seconds) without the user needing to hit reload.
+ * `loader` should be a stable async function (wrap it in useCallback if it
+ * depends on props/state); it fetches data and updates its own state, this
+ * hook only decides *when* to call it.
  *
- * `loader` should be a stable-ish async function (wrap it in useCallback
- * in the caller if it depends on props/state) that fetches new data and
- * updates its own state. This hook only cares about *when* to call it.
- *
- * Returns:
- *   - lastUpdated: Date | null, when the loader last completed successfully
- *   - refreshing: true while a background (non-initial) refresh is in flight
- *   - refresh(): trigger an immediate refresh, resetting the interval timer
+ * Returns lastUpdated (Date|null), refreshing (bool), refresh() (forces an
+ * immediate refresh and resets the timer).
  */
 export function useAutoRefresh(loader, { intervalMs = 60000, enabled = true } = {}) {
   const [lastUpdated, setLastUpdated] = useState(null);
@@ -23,8 +18,8 @@ export function useAutoRefresh(loader, { intervalMs = 60000, enabled = true } = 
   const loaderRef = useRef(loader);
   const timerRef = useRef(null);
 
-  // Keep the latest loader available to the interval without having to
-  // recreate the interval every time the caller's loader identity changes.
+  // keep the latest loader available without recreating the interval
+  // every time the caller passes a new function identity
   useEffect(() => {
     loaderRef.current = loader;
   }, [loader]);
@@ -57,9 +52,7 @@ export function useAutoRefresh(loader, { intervalMs = 60000, enabled = true } = 
   }, [enabled, intervalMs, runLoader]);
 
   useEffect(() => {
-    // Defer the very first load out of the effect body itself so this
-    // doesn't synchronously trigger a setState while React is still
-    // committing this effect's own render pass.
+    // deferred so this doesn't setState synchronously mid-commit
     const initialLoad = setTimeout(() => runLoader(false), 0);
 
     if (enabled) {

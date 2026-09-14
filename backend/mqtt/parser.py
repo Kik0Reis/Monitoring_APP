@@ -1,44 +1,31 @@
-"""
-MQTT topic and payload parser.
-
-This module only understands the shape of MQTT messages — it doesn't
-touch the database, update devices, create alerts, or connect to MQTT.
-It turns a raw topic + payload into a plain dict that mqtt/service.py
-knows what to do with.
-"""
+"""Turns raw MQTT topic/payload strings into plain dicts. No DB access here."""
 
 import json
 from typing import Any
 
 
 class MQTTParserError(Exception):
-    """Raised when an MQTT topic or payload doesn't match what we expect."""
+    """Topic or payload didn't match a known shape."""
 
 
 def parse_topic(topic: str) -> dict[str, Any]:
     """
-    Parse an AiAction MQTT topic into its component parts.
+    Break an aiaction/... topic into its parts and classify the message type.
 
-    Supported shapes (the old "status/{source}", root "health", root
-    "cameras", and per-camera "ch{n}/{alert,event,error}" shapes have
-    been retired in favor of these):
-
-        aiaction/{country}/{client}/{installation}/{device_id}/info/edge-device
-        aiaction/{country}/{client}/{installation}/{device_id}/info/cameras
-        aiaction/{country}/{client}/{installation}/{device_id}/health/overall-health
-        aiaction/{country}/{client}/{installation}/{device_id}/health/cameras
-        aiaction/{country}/{client}/{installation}/{device_id}/health/edge-device
-        aiaction/{country}/{client}/{installation}/{device_id}/health/{component}
-        aiaction/{country}/{client}/{installation}/{device_id}/issues/{issue_name}
-        aiaction/{country}/{client}/{installation}/{device_id}/detections/{camera_id}/{channel}
+    aiaction/{country}/{client}/{installation}/{device_id}/info/edge-device
+    aiaction/{country}/{client}/{installation}/{device_id}/info/cameras
+    aiaction/{country}/{client}/{installation}/{device_id}/health/overall-health
+    aiaction/{country}/{client}/{installation}/{device_id}/health/cameras
+    aiaction/{country}/{client}/{installation}/{device_id}/health/edge-device
+    aiaction/{country}/{client}/{installation}/{device_id}/health/{component}
+    aiaction/{country}/{client}/{installation}/{device_id}/issues/{issue_name}
+    aiaction/{country}/{client}/{installation}/{device_id}/detections/{camera_id}/{channel}
     """
 
     if not isinstance(topic, str) or not topic.strip():
         raise MQTTParserError("MQTT topic cannot be empty.")
 
-    # Be lenient about a trailing slash (some publishers write topics
-    # like ".../detections/CAM-1/1/") rather than treating it as an
-    # extra, empty path segment.
+    # publishers sometimes leave a trailing slash on, strip it before splitting
     cleaned_topic = topic.strip().rstrip("/")
 
     if not cleaned_topic:
@@ -79,15 +66,12 @@ def parse_topic(topic: str) -> dict[str, Any]:
         "device_id": device_id,
     }
 
-    # Device system/hardware info: aiaction/.../{device_id}/info/edge-device
     if category == "info" and len(parts) == 7 and parts[6] == "edge-device":
         return {"message_type": "device_info", **base}
 
-    # Camera identity list: aiaction/.../{device_id}/info/cameras
     if category == "info" and len(parts) == 7 and parts[6] == "cameras":
         return {"message_type": "camera_info", **base}
 
-    # Health messages: aiaction/.../{device_id}/health/{health_topic}
     if category == "health" and len(parts) == 7:
         health_topic = parts[6]
 
@@ -103,12 +87,10 @@ def parse_topic(topic: str) -> dict[str, Any]:
         if health_topic == "edge-device":
             return {"message_type": "health_edge_device", **base}
 
-        # Any other health/{name} is an internal component's own status
-        # (detectorapi, detector, idmr, or any future one) -- handled
-        # generically rather than hardcoding the current component names.
+        # anything else under health/ is a component reporting its own status
+        # (detectorapi, detector, idmr, whatever gets added later)
         return {"message_type": "health_component", "source": health_topic, **base}
 
-    # Device-level issue: aiaction/.../{device_id}/issues/{issue_name}
     if category == "issues" and len(parts) == 7:
         issue_name = parts[6]
 
@@ -117,7 +99,6 @@ def parse_topic(topic: str) -> dict[str, Any]:
 
         return {"message_type": "issue", "issue_name": issue_name, **base}
 
-    # Per-camera detection: aiaction/.../{device_id}/detections/{camera_id}/{channel}
     if category == "detections" and len(parts) == 8:
         camera_id = parts[6]
         raw_channel = parts[7]
@@ -143,7 +124,7 @@ def parse_topic(topic: str) -> dict[str, Any]:
 
 
 def parse_payload(payload: bytes | str | dict) -> dict[str, Any]:
-    """Decode an MQTT payload (bytes, JSON string, or already a dict) to a dict."""
+    """Decode a payload (bytes, JSON string, or dict) into a dict."""
 
     if isinstance(payload, dict):
         return payload
@@ -170,10 +151,9 @@ def parse_payload(payload: bytes | str | dict) -> dict[str, Any]:
 
 def parse_mqtt_message(topic: str, payload: bytes | str | dict) -> dict[str, Any]:
     """
-    Parse a raw MQTT topic + payload into one dict the service layer can
-    use directly — topic fields merged with the payload, plus every
-    optional field (camera_id, channel, source, issue_name) defaulted to
-    None so callers never have to guess whether a key is present.
+    Combine parse_topic + parse_payload into the single dict service.py expects.
+    Optional fields (camera_id, channel, source, issue_name) always default to
+    None so callers don't need to check if a key exists.
     """
 
     parsed_topic = parse_topic(topic)

@@ -1,10 +1,7 @@
-"""
-Heartbeat timeout monitoring.
+"""Checks for stale last_seen timestamps and flips devices/cameras offline.
 
-MQTT processing updates a device/camera's last_seen every time it hears
-from it. This module is the other half: it checks whether last_seen has
-gone stale for either Edge devices or their cameras, and flips them
-offline (with an alert) when it has.
+MQTT processing updates last_seen every time a device/camera reports in --
+this is the other half, catching the ones that stopped.
 """
 
 from datetime import timedelta
@@ -82,9 +79,8 @@ def check_all_device_timeouts(
 
     offline_count = 0
 
-    # Only the columns check_device_timeout() actually needs — devices can
-    # have a large health_data/component_statuses JSON blob that we don't
-    # want to pull across the wire on every single timeout sweep.
+    # only the columns we need -- devices can carry a large health_data/
+    # component_statuses JSON blob we don't want on every sweep
     devices = Device.objects.filter(active=True).only(
         "id", "last_seen", "status", "name"
     )

@@ -12,15 +12,11 @@ class Location(TimeStampedModel):
     description = models.TextField(blank=True)
     active = models.BooleanField(default=True)
 
-    # Stable key used to match this location against the "{installation}"
-    # segment of an MQTT topic. See Customer.mqtt_key for why this is kept
-    # separate from the human-editable `name`. Manually-created locations
-    # leave this blank.
+    # matches the "{installation}" segment of an MQTT topic, separate from
+    # the human-editable name (see Customer.mqtt_key). blank if made by hand
     mqtt_key = models.CharField(max_length=150, blank=True, null=True)
 
-    # True for locations auto-created from an MQTT topic that didn't match
-    # any existing location. Fully functional either way — this is just a
-    # UI flag so a human can confirm/rename it.
+    # set for locations auto-created from MQTT traffic, just a UI flag
     pending_review = models.BooleanField(default=False)
 
     class Meta:

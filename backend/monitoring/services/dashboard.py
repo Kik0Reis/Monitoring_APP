@@ -1,12 +1,5 @@
-"""
-Monitoring dashboard aggregation service.
-
-This is the single source of truth for the data shown on the frontend
-dashboard. Previously this logic was duplicated (once here, once inline
-inside monitoring/views.py::DashboardView) and the two implementations had
-drifted apart, which is why the dashboard behaved inconsistently. The view
-now just calls get_dashboard_data() below.
-"""
+"""Builds all the data the frontend dashboard needs. Single source of truth --
+views.py just calls get_dashboard_data()."""
 
 from django.db.models import Count, Prefetch, Q
 
@@ -31,24 +24,13 @@ def get_dashboard_summary():
     }
 
 
-# Problems (device/camera health & connectivity issues)
-#
-# "Problem" alerts have an active/resolved lifecycle: the backend reuses
-# the same alert row while a device stays offline (see create_offline_alert
-# / create_health_alert), so filtering to active_only=True naturally shows
-# exactly one row per device/camera that currently needs attention. With
-# active_only=False you get the full history, including old, resolved
-# alerts from devices that have flapped online/offline repeatedly.
-
-
 def get_problem_alerts(limit=10, active_only=True):
-    """
-    Return device/camera health & connectivity problems, newest first.
+    """Device/camera health & connectivity problems, newest first.
 
-    Includes: DeviceAlert (all types) and CameraAlert of type
-    CAMERA_ERROR or CAMERA_OFFLINE. Does NOT include CameraAlert of type
-    CAMERA_ALERT (those are real-world detections, see
-    get_camera_detections below).
+    DeviceAlert (all types) + CameraAlert of type CAMERA_ERROR/CAMERA_OFFLINE.
+    Not CAMERA_ALERT, those are real detections (see get_camera_detections).
+    active_only=True naturally dedupes to one row per broken thing, since
+    the alert row is reused while it stays broken rather than re-created.
     """
 
     device_alerts = DeviceAlert.objects.select_related("device", "device__location")
@@ -76,15 +58,12 @@ def get_problem_alerts(limit=10, active_only=True):
     return alerts
 
 
-# Detections (real events reported by a camera over MQTT, e.g. smoke,
-# person, or other AI-detected events)
-#
-# These are a chronological event log, not a "currently broken" list, so
-# there's no active/resolved filtering here — every detection is shown.
-
-
 def get_camera_detections(limit=50):
-    """Return the most recent real-world detections (CAMERA_ALERT), newest first."""
+    """Most recent real-world detections (CAMERA_ALERT), newest first.
+
+    Chronological log, not a "currently broken" list -- no active/resolved
+    filtering, every detection shows.
+    """
 
     camera_alerts = (
         CameraAlert.objects.filter(alert_type=CameraAlertType.CAMERA_ALERT)
@@ -174,18 +153,9 @@ def _serialize_camera_alerts(camera_alerts):
     return alerts
 
 
-# Devices with problems
-#
-# Individual, device-level view of "what is currently broken" so the
-# frontend dashboard can link straight to the offending device.
-
-
-# Short, human-friendly labels for the "Devices with problems" dashboard
-# panel. Alert.message can be an arbitrarily long string (e.g. DEVICE_ERROR
-# messages come straight from whatever text the edge device sent over
-# MQTT), which looks broken crammed into a single dashboard row. The full
-# message is still shown on the device detail page -- this is only for the
-# compact dashboard summary.
+# short labels for the dashboard row -- alert.message can be an arbitrary
+# long string (DEVICE_ERROR forwards whatever text the edge device sent),
+# the full message still shows on the device detail page
 ALERT_TYPE_SHORT_LABELS = {
     "DEVICE_OFFLINE": "Offline",
     "DEVICE_HEALTH": "Health issue",
@@ -217,12 +187,7 @@ def _device_has_component_problem(device):
 
 
 def get_devices_with_problems(limit=10):
-    """
-    Return individual devices that currently need attention, e.g. because
-    they are OFFLINE/UNKNOWN, have an unhealthy internal component, or have
-    an active alert. Used to power a "click a broken device -> go straight
-    to it" panel on the dashboard.
-    """
+    """Devices needing attention: OFFLINE/UNKNOWN, unhealthy component, or active alert."""
 
     devices = (
         Device.objects.filter(active=True, device_type="EDGE")
@@ -266,11 +231,6 @@ def get_devices_with_problems(limit=10):
         if unhealthy_components:
             issues.append("Unhealthy component(s): " + ", ".join(unhealthy_components))
 
-        # A short label per alert type, not just a count and not the raw
-        # alert.message (which can be a long, arbitrary string) -- this
-        # needs to say *what kind* of thing is wrong at a glance, without
-        # overflowing the dashboard row. The full message is available on
-        # the device detail page.
         for alert in device.active_alerts_prefetched:
             issues.append(ALERT_TYPE_SHORT_LABELS.get(alert.alert_type, "Error"))
 
@@ -288,7 +248,7 @@ def get_devices_with_problems(limit=10):
             }
         )
 
-    # Offline devices first, then unknown, then everything else.
+    # offline first, then unknown, then everything else
     status_priority = {DeviceStatus.OFFLINE: 0, DeviceStatus.UNKNOWN: 1}
 
     result.sort(
@@ -303,19 +263,10 @@ def get_devices_with_problems(limit=10):
 
 
 def get_locations_with_problems(limit=10):
-    """
-    Return locations that currently have monitoring problems.
+    """Locations with an offline/unknown device or camera, or an active alert.
 
-    A location is considered problematic when it has:
-
-    - an offline or unknown device
-    - an active device alert
-    - an offline or unknown camera
-    - an active camera alert
-
-    Each result includes an "issues" list of short, human-readable
-    descriptions (e.g. "2 device(s) offline", "1 camera offline") so the
-    dashboard can show *what's* wrong at a glance, not just a count.
+    Each result gets a short "issues" list (e.g. "2 device(s) offline")
+    instead of just a raw count.
     """
 
     locations = (
@@ -423,21 +374,12 @@ def get_locations_with_problems(limit=10):
 
 
 def get_dashboard_data():
-    """
-    Return all data required by the monitoring dashboard.
-    """
+    """Everything the monitoring dashboard needs, in one call."""
 
     return {
         "summary": get_dashboard_summary(),
-        # Active-only, deduped problems: the backend reuses a single alert
-        # row while something stays broken, so this naturally shows one
-        # entry per currently-broken device/camera instead of repeating a
-        # flapping device's entire history.
         "recent_problems": get_problem_alerts(limit=10, active_only=True),
         "devices_with_problems": get_devices_with_problems(),
         "locations_with_problems": get_locations_with_problems(),
-        # Real-world events cameras have reported (smoke, person, etc).
-        # Unlike problems these don't resolve — every detection stays in
-        # the log — so this is just "the most recent ones".
         "recent_detections": get_camera_detections(limit=10),
     }

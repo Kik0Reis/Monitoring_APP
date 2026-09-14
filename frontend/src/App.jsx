@@ -2,12 +2,12 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
 import AppLayout from "./components/layout/AppLayout";
 import Dashboard from "./pages/Dashboard/Dashboard";
-import Countries from "./pages/Countries/Countries";
-import Clients from "./pages/Clients/Clients";
-import Locations from "./pages/Locations/Locations";
-import Devices from "./pages/Devices/Devices";
-import Cameras from "./pages/Cameras/Cameras";
-import Alerts from "./pages/Alerts/Alerts";
+import Countries from "./pages/Countries/countries";
+import Clients from "./pages/Clients/clients";
+import Locations from "./pages/Locations/locations";
+import Devices from "./pages/Devices/devices";
+import Cameras from "./pages/Cameras/cameras";
+import Alerts from "./pages/Alerts/alerts";
 
 import CountryDetail from "./pages/CountryDetail/CountryDetail";
 import CustomerDetail from "./pages/CustomerDetail/CustomerDetail";

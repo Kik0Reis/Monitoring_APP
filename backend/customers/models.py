@@ -12,20 +12,12 @@ class Customer(TimeStampedModel):
     description = models.TextField(blank=True)
     active = models.BooleanField(default=True)
 
-    # Stable key used to match this customer against the "{client}"
-    # segment of an MQTT topic (aiaction/{country}/{client}/...).
-    #
-    # This is deliberately separate from `name`: `name` is meant to be
-    # human-edited freely (e.g. renamed to a nicer display name), while
-    # `mqtt_key` is set once when the customer is first auto-created from
-    # MQTT and never changes — so renaming a customer in the UI can't
-    # break MQTT matching or cause a duplicate to be auto-created later.
-    # Manually-created customers leave this blank.
+    # matches the "{client}" segment of an MQTT topic, set once on
+    # auto-create and never touched again so renaming in the UI can't
+    # break matching or spawn a duplicate. blank if made by hand
     mqtt_key = models.CharField(max_length=150, blank=True, null=True)
 
-    # True for customers auto-created from an MQTT topic that didn't match
-    # any existing customer. Fully functional either way — this is just a
-    # UI flag so a human can confirm/rename it.
+    # set for customers auto-created from MQTT traffic, just a UI flag
     pending_review = models.BooleanField(default=False)
 
     class Meta:

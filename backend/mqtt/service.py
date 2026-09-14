@@ -1,17 +1,7 @@
-"""
-MQTT message service.
+"""Glues the MQTT layer to the monitoring layer: parse -> resolve device/camera -> dispatch.
 
-This module bridges the MQTT layer and the monitoring layer:
-
-1. Receive a raw MQTT topic and payload.
-2. Parse the MQTT message.
-3. Resolve (and auto-provision) the Edge device.
-4. Resolve the Camera when the message is camera-specific.
-5. Hand the message off to the right monitoring service.
-
-It deliberately does NOT connect to MQTT, parse topics itself, or contain
-any monitoring business logic — that all lives in mqtt/parser.py and
-monitoring/services/*.
+No MQTT connection code and no monitoring logic here, that lives in
+mqtt/parser.py and monitoring/services/*.
 """
 
 import logging
@@ -34,7 +24,7 @@ from mqtt.provisioning import resolve_device
 
 logger = logging.getLogger(__name__)
 
-# Message types that operate on the Edge device itself.
+# these touch the device row directly
 DEVICE_MESSAGE_TYPES = {
     "device_info",
     "camera_info",
@@ -45,17 +35,12 @@ DEVICE_MESSAGE_TYPES = {
     "issue",
 }
 
-# Message types that operate on an individual camera attached to a device.
+# these touch a specific camera under the device
 CAMERA_MESSAGE_TYPES = {"detection"}
 
 
 def process_mqtt_message(topic: str, payload: bytes | str | dict):
-    """
-    Entry point for every incoming MQTT message.
-
-    Returns the Device or Camera that was updated, or None if the message
-    was invalid, unsupported, or referred to something we couldn't resolve.
-    """
+    """Entry point for one MQTT message. Returns the updated Device/Camera, or None."""
 
     logger.info("Processing MQTT message: %s", topic)
 
@@ -67,10 +52,8 @@ def process_mqtt_message(topic: str, payload: bytes | str | dict):
 
     message_type = parsed_message["message_type"]
 
-    # Devices are resolved via the full topic path, not a bare device_id
-    # lookup — mqtt_identifier is only unique *within* a location, so two
-    # different customers can legitimately both have a device called "01".
-    # See mqtt/provisioning.py for the full rationale.
+    # resolved by full topic path, not bare device_id -- mqtt_identifier is only
+    # unique within a location, two customers can both have a device named "01"
     device = resolve_device(
         country_code=parsed_message["country"],
         client_key=parsed_message["client"],
@@ -81,9 +64,8 @@ def process_mqtt_message(topic: str, payload: bytes | str | dict):
     if device is None:
         return None
 
-    # Any message at all from this device proves it's on MQTT right now --
-    # record it in case a reconciliation window is currently open (see
-    # monitoring/services/mqtt_reconciliation.py). Cheap no-op otherwise.
+    # any message proves the device is alive on MQTT right now, useful if a
+    # reconciliation window is open (monitoring/services/mqtt_reconciliation.py)
     reconcile_state.record_device_seen(device.id)
 
     logger.info(
@@ -107,7 +89,7 @@ def process_mqtt_message(topic: str, payload: bytes | str | dict):
 
 
 def _handle_device_message(message_type, device, parsed_message):
-    """Handle a message that targets the Edge device itself (not a camera)."""
+    """Route a device-level message (not camera-specific) to the right handler."""
 
     payload_data = parsed_message["payload"]
 
@@ -207,7 +189,7 @@ def _handle_device_message(message_type, device, parsed_message):
         )
         return device
 
-    # message_type == "issue"
+    # only remaining case is "issue"
     issue_name = parsed_message.get("issue_name")
     process_device_issue(device=device, issue_name=issue_name, payload=payload_data)
     device.refresh_from_db()
@@ -216,7 +198,7 @@ def _handle_device_message(message_type, device, parsed_message):
 
 
 def _handle_camera_message(message_type, device, parsed_message, topic):
-    """Handle a message that targets one specific camera (detections)."""
+    """Route a message that targets one specific camera (detections only, for now)."""
 
     camera_id = parsed_message.get("camera_id")
     channel = parsed_message.get("channel")
@@ -245,9 +227,6 @@ def _handle_camera_message(message_type, device, parsed_message, topic):
 
     payload_data = parsed_message["payload"]
 
-    # message_type == "detection" (the only camera-specific message type
-    # left -- see mqtt/parser.py for the topics that used to be split
-    # into separate alert/event/error topics).
     alert = process_camera_detection(camera=camera, payload=payload_data)
     camera.refresh_from_db()
     logger.info(

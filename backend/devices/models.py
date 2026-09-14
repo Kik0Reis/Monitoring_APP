@@ -15,13 +15,11 @@ class DeviceType(models.TextChoices):
 
 
 class Device(TimeStampedModel):
-    """
-    An Edge device — the box on-site that a customer's cameras plug into.
+    """The on-site box a customer's cameras plug into.
 
-    Device.status is the health of the Edge box itself. Its internal
-    services (detectorapi, detector, idmr, ...) are tracked separately in
-    component_statuses, since one can be down while the box overall is
-    still reachable.
+    status = health of the box itself. Internal services (detectorapi,
+    detector, idmr, ...) live in component_statuses -- one can be down
+    while the box is still reachable.
     """
 
     location = models.ForeignKey(
@@ -38,28 +36,17 @@ class Device(TimeStampedModel):
 
     last_seen = models.DateTimeField(null=True, blank=True)
 
-    # Whether this device showed up the last time the MQTT subscriber
-    # reconciled its known devices against the broker (see
-    # monitoring/services/mqtt_reconciliation.py). Unlike `status`, this is
-    # never time-based -- it only flips to False when a full reconcile
-    # cycle genuinely didn't see this device, which is what lets a device
-    # be deleted with confidence after e.g. a bulk country delete.
+    # did this device show up in the last broker reconciliation? not
+    # time-based like status, only flips False when a full reconcile cycle
+    # genuinely missed it (see monitoring/services/mqtt_reconciliation.py)
     on_mqtt = models.BooleanField(default=True)
 
-    # Health of each internal service the Edge box runs, e.g.:
-    #
-    # {
-    #     "detectorapi": {"status": "up", "initialized": true, "configs_loaded": true},
-    #     "detector": {"status": "up", "unhealthy_cameras": []},
-    #     "idmr": {"status": "up", "config_loaded": true, "unhealthy_cameras": []}
-    # }
+    # per-service health, e.g. {"detectorapi": {"status": "up", ...}, "detector": {...}}
     component_statuses = models.JSONField(default=dict, blank=True)
 
     health_data = models.JSONField(default=dict, blank=True)
 
-    # Hardware/system info reported on aiaction/.../info/edge-device, e.g.
-    # OS, CPU/RAM/GPU specs, IP address. Purely informational -- shown on
-    # the device detail page, never used for status/health logic.
+    # OS/CPU/RAM/GPU/IP from aiaction/.../info/edge-device, display-only
     system_info = models.JSONField(default=dict, blank=True)
 
     device_type = models.CharField(
@@ -71,10 +58,8 @@ class Device(TimeStampedModel):
 
     active = models.BooleanField(default=True)
 
-    # True for devices auto-created from an MQTT topic that didn't match
-    # any existing device. Fully functional either way — this is just a
-    # UI flag so a human can confirm/rename it and fill in its real
-    # serial number (auto-created devices get a placeholder).
+    # set for devices auto-created from MQTT traffic, just a UI flag so
+    # a human can confirm/rename and fill in the real serial number
     pending_review = models.BooleanField(default=False)
 
     class Meta:
@@ -86,12 +71,8 @@ class Device(TimeStampedModel):
             models.UniqueConstraint(
                 fields=["location", "name"], name="unique_device_name_per_location"
             ),
-            # mqtt_identifier is only guaranteed unique WITHIN a location,
-            # not globally — two different customers can legitimately
-            # both have a device whose MQTT topic calls it "01". Messages
-            # are routed using the full country/client/installation/
-            # device_id path (see mqtt/provisioning.py), never a bare
-            # device_id lookup.
+            # unique per location only, not globally -- two customers can
+            # both have a device their MQTT topic calls "01" (see mqtt/provisioning.py)
             models.UniqueConstraint(
                 fields=["location", "mqtt_identifier"],
                 name="unique_device_mqtt_identifier_per_location",

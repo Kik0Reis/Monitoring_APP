@@ -1,11 +1,7 @@
-"""
-MQTT subscriber.
+"""Connects to the broker, receives messages, runs periodic reconciliation.
 
-Responsible for connecting to the broker, receiving messages, and
-periodically reconciling which devices/cameras the broker still knows
-about (see monitoring/services/mqtt_reconciliation.py). Topic/payload
-parsing, device updates, and alerting all live elsewhere (see
-mqtt/service.py) -- this class just hands raw messages off to it.
+Parsing/device updates/alerting live in mqtt/service.py -- this class just
+hands raw messages off to it and manages the connection lifecycle.
 """
 
 import logging
@@ -34,9 +30,10 @@ class MQTTSubscriber:
         self.keepalive = settings.MQTT_KEEPALIVE
         self.topic = "aiaction/#"
 
-        # How often (and for how long) to force the broker to resend every
-        # retained message, to detect devices/cameras it no longer knows
-        # about. See monitoring/services/mqtt_reconciliation.py.
+        # interval: how often we force a resubscribe to make the broker
+        # resend every retained message. window: how long we wait after
+        # that resubscribe for messages to arrive before deciding which
+        # devices/cameras didn't respond. See mqtt_reconciliation.py.
         self.reconcile_interval_seconds = max(
             60, settings.MQTT_RECONCILE_INTERVAL_MINUTES * 60
         )
@@ -57,9 +54,8 @@ class MQTTSubscriber:
         if settings.MQTT_TLS:
             self.client.tls_set()
 
-        # loop_start() (used below) runs the network loop on its own
-        # thread rather than blocking the caller like loop_forever() does,
-        # so make sure reconnects still happen automatically with backoff.
+        # loop_start() below runs the network loop on its own thread, so
+        # set up auto-reconnect with backoff rather than blocking here
         self.client.reconnect_delay_set(min_delay=1, max_delay=30)
 
         self.client.on_connect = self.on_connect
@@ -77,19 +73,16 @@ class MQTTSubscriber:
 
         logger.info("Connected to EMQX Cloud: %s:%s", self.host, self.port)
 
-        # Treat every (re)connect as a reconciliation cycle too: this is
-        # exactly what fixed the "missing devices until Docker restart"
-        # bug -- a fresh subscribe already makes the broker resend every
-        # retained message, so there's no reason to wait for the next
-        # scheduled cycle to find out what's actually out there.
+        # also reconcile on every (re)connect, not just on schedule -- a
+        # fresh subscribe already makes the broker resend retained
+        # messages, so no reason to wait for the next scheduled cycle
         self._subscribe_and_reconcile(client)
 
     def _subscribe_and_reconcile(self, client):
-        """
-        (Re-)subscribe to the wildcard topic and open a reconciliation
-        window. Subscribing makes the broker resend every retained
-        message; whatever shows up within the window proves that
-        device/camera is still on MQTT.
+        """Resubscribe and open a reconciliation window.
+
+        Subscribing makes the broker resend every retained message --
+        whatever shows up during the window is still on MQTT.
         """
 
         start_reconcile_window()
@@ -125,11 +118,7 @@ class MQTTSubscriber:
             logger.exception("Error finishing MQTT reconciliation window.")
 
     def _reconcile_loop(self):
-        """
-        Runs on its own thread: every MQTT_RECONCILE_INTERVAL_MINUTES,
-        force the broker to resend every retained message by
-        unsubscribing and re-subscribing to the wildcard topic.
-        """
+        """Every reconcile interval, force a resend by unsub/resub to the wildcard topic."""
 
         while not self._stop_event.wait(self.reconcile_interval_seconds):
             try:
@@ -143,13 +132,8 @@ class MQTTSubscriber:
                 logger.exception("Error running periodic MQTT reconciliation cycle.")
 
     def on_message(self, client, userdata, message):
-        """
-        Hand a raw MQTT message off to the service layer.
-
-        Wrapped in a broad try/except on purpose: one malformed or
-        unexpected message must never take down this long-running
-        subscriber process.
-        """
+        """Hand a raw message to the service layer. One bad message should
+        never kill this long-running process, hence the broad except."""
 
         logger.info("MQTT message received. Topic: %s", message.topic)
 
@@ -177,9 +161,7 @@ class MQTTSubscriber:
         )
         self._reconcile_scheduler_thread.start()
 
-        # loop_start() runs the network loop on a background thread, so
-        # block the main thread here until asked to stop (Ctrl+C raises
-        # KeyboardInterrupt right through this wait, same as before).
+        # network loop runs in the background, block here until stop() is called
         self._stop_event.wait()
 
     def stop(self):

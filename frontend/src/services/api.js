@@ -1,7 +1,5 @@
-// Hardcoding this would break the app for anyone who isn't running the
-// backend on localhost:8000 (staging, production, another dev's machine
-// with a different port). VITE_API_BASE_URL lets that be configured per
-// environment; it defaults to the local dev backend when unset.
+// VITE_API_BASE_URL lets this be set per environment (staging, prod, another
+// dev's machine); falls back to the local backend when unset.
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api";
 
 async function apiRequest(endpoint, options = {}) {
@@ -19,8 +17,7 @@ async function apiRequest(endpoint, options = {}) {
     try {
       error = await response.json();
     } catch {
-      // Response body wasn't JSON (or was empty) — fall through to the
-      // generic error message below.
+      // no JSON body, fall through to the generic message below
     }
 
     if (error?.detail) {
@@ -31,27 +28,22 @@ async function apiRequest(endpoint, options = {}) {
       throw new Error(error.message);
     }
 
-    // Django serializer validation errors
+    // Django serializer validation errors: {field: ["msg", ...]}
     if (error && typeof error === "object") {
-      const messages = Object.entries(error)
-        .flatMap(([field, messages]) => {
-          if (Array.isArray(messages)) {
-            return messages.map(
-              (message) => `${field}: ${message}`
-            );
-          }
+      const messages = Object.entries(error).flatMap(([field, messages]) => {
+        if (Array.isArray(messages)) {
+          return messages.map((message) => `${field}: ${message}`);
+        }
 
-          return [`${field}: ${messages}`];
-        });
+        return [`${field}: ${messages}`];
+      });
 
       if (messages.length > 0) {
         throw new Error(messages.join(" "));
       }
     }
 
-    throw new Error(
-      "Something went wrong while communicating with the API."
-    );
+    throw new Error("Something went wrong while communicating with the API.");
   }
 
   if (response.status === 204) {
@@ -62,11 +54,8 @@ async function apiRequest(endpoint, options = {}) {
 }
 
 /**
- * Fetches every page of a (potentially paginated) list endpoint.
- *
- * Used only to populate dropdowns (e.g. "which country does this client
- * belong to") where we need the full set of options, not just the first
- * page of results.
+ * Fetches every page of a paginated list endpoint. Only used to populate
+ * dropdowns that need the full option set, not just the first page.
  */
 export async function fetchAll(listFn, params = "") {
   let url = params;
@@ -97,177 +86,54 @@ export async function fetchAll(listFn, params = "") {
 }
 
 /**
- * Shared "approve" action for resources that can be auto-provisioned
- * from MQTT (countries/customers/locations/devices) and therefore carry
- * a pending_review flag. Confirms a human has looked at the record.
+ * Standard list/get/create/update/delete for a REST resource, plus
+ * "approve" for the ones that carry a pending_review flag (anything
+ * that can be auto-provisioned from MQTT).
  */
-function makeApprove(resourcePath) {
-  return function approve(id) {
-    return apiRequest(`/${resourcePath}/${id}/approve/`, {
-      method: "POST",
-    });
+function makeCrudApi(resourcePath, { approvable = false } = {}) {
+  const api = {
+    list(params = "") {
+      return apiRequest(`/${resourcePath}/${params}`);
+    },
+
+    get(id) {
+      return apiRequest(`/${resourcePath}/${id}/`);
+    },
+
+    create(data) {
+      return apiRequest(`/${resourcePath}/`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
+    },
+
+    update(id, data) {
+      return apiRequest(`/${resourcePath}/${id}/`, {
+        method: "PUT",
+        body: JSON.stringify(data),
+      });
+    },
+
+    delete(id) {
+      return apiRequest(`/${resourcePath}/${id}/`, {
+        method: "DELETE",
+      });
+    },
   };
+
+  if (approvable) {
+    api.approve = (id) =>
+      apiRequest(`/${resourcePath}/${id}/approve/`, { method: "POST" });
+  }
+
+  return api;
 }
 
-export const countriesApi = {
-  list(params = "") {
-    return apiRequest(`/countries/${params}`);
-  },
-
-  get(id) {
-    return apiRequest(`/countries/${id}/`);
-  },
-
-  create(data) {
-    return apiRequest("/countries/", {
-      method: "POST",
-      body: JSON.stringify(data),
-    });
-  },
-
-  update(id, data) {
-    return apiRequest(`/countries/${id}/`, {
-      method: "PUT",
-      body: JSON.stringify(data),
-    });
-  },
-
-  delete(id) {
-    return apiRequest(`/countries/${id}/`, {
-      method: "DELETE",
-    });
-  },
-
-  approve: makeApprove("countries"),
-};
-
-export const customersApi = {
-  list(params = "") {
-    return apiRequest(`/customers/${params}`);
-  },
-
-  get(id) {
-    return apiRequest(`/customers/${id}/`);
-  },
-
-  create(data) {
-    return apiRequest("/customers/", {
-      method: "POST",
-      body: JSON.stringify(data),
-    });
-  },
-
-  update(id, data) {
-    return apiRequest(`/customers/${id}/`, {
-      method: "PUT",
-      body: JSON.stringify(data),
-    });
-  },
-
-  delete(id) {
-    return apiRequest(`/customers/${id}/`, {
-      method: "DELETE",
-    });
-  },
-
-  approve: makeApprove("customers"),
-};
-
-export const locationsApi = {
-  list(params = "") {
-    return apiRequest(`/locations/${params}`);
-  },
-
-  get(id) {
-    return apiRequest(`/locations/${id}/`);
-  },
-
-  create(data) {
-    return apiRequest("/locations/", {
-      method: "POST",
-      body: JSON.stringify(data),
-    });
-  },
-
-  update(id, data) {
-    return apiRequest(`/locations/${id}/`, {
-      method: "PUT",
-      body: JSON.stringify(data),
-    });
-  },
-
-  delete(id) {
-    return apiRequest(`/locations/${id}/`, {
-      method: "DELETE",
-    });
-  },
-
-  approve: makeApprove("locations"),
-};
-
-export const devicesApi = {
-  list(params = "") {
-    return apiRequest(`/devices/${params}`);
-  },
-
-  get(id) {
-    return apiRequest(`/devices/${id}/`);
-  },
-
-  create(data) {
-    return apiRequest("/devices/", {
-      method: "POST",
-      body: JSON.stringify(data),
-    });
-  },
-
-  update(id, data) {
-    return apiRequest(`/devices/${id}/`, {
-      method: "PUT",
-      body: JSON.stringify(data),
-    });
-  },
-
-  delete(id) {
-    return apiRequest(`/devices/${id}/`, {
-      method: "DELETE",
-    });
-  },
-
-  approve: makeApprove("devices"),
-};
-
-export const camerasApi = {
-  list(params = "") {
-    return apiRequest(`/cameras/${params}`);
-  },
-
-  get(id) {
-    return apiRequest(`/cameras/${id}/`);
-  },
-
-  create(data) {
-    return apiRequest("/cameras/", {
-      method: "POST",
-      body: JSON.stringify(data),
-    });
-  },
-
-  update(id, data) {
-    return apiRequest(`/cameras/${id}/`, {
-      method: "PUT",
-      body: JSON.stringify(data),
-    });
-  },
-
-  delete(id) {
-    return apiRequest(`/cameras/${id}/`, {
-      method: "DELETE",
-    });
-  },
-
-  approve: makeApprove("cameras"),
-};
+export const countriesApi = makeCrudApi("countries", { approvable: true });
+export const customersApi = makeCrudApi("customers", { approvable: true });
+export const locationsApi = makeCrudApi("locations", { approvable: true });
+export const devicesApi = makeCrudApi("devices", { approvable: true });
+export const camerasApi = makeCrudApi("cameras", { approvable: true });
 
 // Device/camera health & connectivity problems (offline, unhealthy
 // component, MQTT/system errors, camera errors). Active-only by default.
@@ -277,7 +143,7 @@ export const problemsApi = {
   },
 };
 
-// Real camera detections reported over MQTT (smoke, person, etc.). Plain
+// Real camera detections reported over MQTT (smoke, person, etc). Plain
 // chronological event log, no active/resolved concept.
 export const detectionsApi = {
   list(params = "") {
@@ -286,18 +152,8 @@ export const detectionsApi = {
 };
 
 export const dashboardApi = {
-  async get() {
-    const response = await fetch(
-      `${API_BASE_URL}/dashboard/`
-    );
-
-    if (!response.ok) {
-      throw new Error(
-        "Failed to load dashboard."
-      );
-    }
-
-    return response.json();
+  get() {
+    return apiRequest("/dashboard/");
   },
 };
 

@@ -1,19 +1,13 @@
-"""
-Auto-provisioning of the Country -> Customer -> Location -> Device tree
-from MQTT topics.
+"""Auto-creates Country/Customer/Location/Device records from MQTT topics.
 
-Devices are resolved using the FULL path extracted from the topic
-(country / client / installation / device_id), never a bare device_id
-lookup. This matters because mqtt_identifier is only guaranteed unique
-*within a location* — two different customers can legitimately both
-have a device whose installer called it "01".
+Devices are looked up by the full topic path, not a bare device_id --
+mqtt_identifier is only unique within a location, so two customers can
+both have a device named "01" by their installer.
 
-Anything created here is a guess based on untrusted network input
-(anyone who can publish to the MQTT broker can trigger this), so every
-newly created record is marked pending_review=True. It behaves exactly
-like a normal record everywhere else in the app — pending_review is
-purely a UI flag so a human can confirm it, rename it to something
-meaningful, and (for devices) fill in its real serial number.
+Anything auto-created here comes from untrusted network input (anyone who
+can publish to the broker triggers this), so it's saved as pending_review=True.
+It works exactly like any other record, that flag just tells the UI a human
+should confirm/rename it.
 """
 
 import logging
@@ -30,20 +24,14 @@ logger = logging.getLogger(__name__)
 
 
 def _resolve_by_mqtt_key(model, mqtt_key, lookup, name_field, defaults):
-    """
-    Shared get-or-create logic for models with both a unique `name` and a
-    separately-unique `mqtt_key` (Customer, Location).
+    """Get-or-create for models with both a unique name and a unique mqtt_key.
 
-    A record with this name may already exist without an mqtt_key (e.g.
-    created by hand through the UI before any MQTT traffic arrived for
-    it). If we only searched by mqtt_key, get_or_create would try to
-    insert a second row with the same name and crash on the unique
-    (scope, name) constraint. So we check by name first and adopt that
-    record instead of creating a duplicate.
+    A record with this name might already exist without an mqtt_key (created
+    by hand in the UI before any MQTT traffic showed up for it). Checking by
+    mqtt_key alone would insert a duplicate and crash on the name constraint,
+    so we check by name first and adopt that row instead.
 
-    `lookup` is the queryset filter identifying the parent scope, e.g.
-    {"country": country} for Customer or {"customer": customer} for
-    Location.
+    `lookup` scopes the search to the parent, e.g. {"country": country}.
     """
 
     existing = model.objects.filter(mqtt_key=mqtt_key, **lookup).first()
@@ -62,22 +50,18 @@ def _resolve_by_mqtt_key(model, mqtt_key, lookup, name_field, defaults):
         with transaction.atomic():
             return (model.objects.create(mqtt_key=mqtt_key, **lookup, **defaults), True)
     except IntegrityError:
-        # Lost a race with another request that created the same record
-        # in between our checks above and our insert — just use theirs.
+        # someone else created it between our check and our insert, use theirs
         return model.objects.get(mqtt_key=mqtt_key, **lookup), False
 
 
 def resolve_device(
     *, country_code: str, client_key: str, installation_key: str, device_id: str
 ) -> Device | None:
-    """
-    Resolve the Device for an incoming MQTT message, auto-creating any
-    missing Country/Customer/Location/Device along the way.
+    """Find/auto-create the Device an MQTT message belongs to.
 
-    Returns None (and logs a warning, mirroring the old "unknown device"
-    behavior) if the device already exists but has been deliberately
-    deactivated — a disabled device should not have messages processed
-    for it, and should not be silently "resurrected" by MQTT traffic.
+    Returns None if the device exists but was deliberately deactivated --
+    a disabled device shouldn't get resurrected just because MQTT traffic
+    still shows up for it.
     """
 
     country = _resolve_country(country_code)
@@ -163,20 +147,18 @@ def _resolve_device(location: Location, device_id: str) -> Device:
             mqtt_identifier=identifier,
             defaults={
                 "name": identifier,
-                # No serial number is available from MQTT. This placeholder
-                # is guaranteed unique (location.id is globally unique) and
-                # obviously a placeholder, so it's easy to spot in the UI
-                # and replace with the device's real serial number later.
+                # MQTT has no serial number -- this placeholder is unique
+                # (location.id is global) and obviously fake, easy to spot
+                # and replace with the real one later
                 "serial_number": f"AUTO-{location.id}-{identifier}",
                 "device_type": DeviceType.EDGE,
                 "pending_review": True,
             },
         )
     except IntegrityError:
-        # A manually-created device at this location already has the
-        # name we'd want to use (unique_device_name_per_location), even
-        # though its mqtt_identifier doesn't match. Fall back to it
-        # rather than crashing MQTT processing.
+        # a manually-created device at this location already has this name,
+        # even though its mqtt_identifier differs -- fall back to it instead
+        # of crashing MQTT processing
         device = Device.objects.get(location=location, name=identifier)
         created = False
 
@@ -193,14 +175,10 @@ def _resolve_device(location: Location, device_id: str) -> Device:
 def resolve_camera(
     device: Device, camera_identifier: str, name: str | None = None, channel: int = 1
 ) -> Camera:
-    """
-    Resolve the Camera for an entry in a device's ".../cameras" status
-    list, auto-creating it if this device hasn't reported this camera
-    before.
+    """Find/auto-create the Camera for an entry in a device's cameras list.
 
-    Scoped to `device` (Camera.camera_identifier is already only unique
-    per-device in the schema, so no collision risk here the way there was
-    with Device.mqtt_identifier).
+    Scoped to `device` -- camera_identifier is only unique per-device, so
+    there's no cross-customer collision risk like there was for devices.
     """
 
     identifier = camera_identifier.strip()

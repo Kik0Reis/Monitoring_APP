@@ -35,11 +35,7 @@ class DeviceViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"])
     def approve(self, request, pk=None):
-        """
-        Clear pending_review on a device that was auto-created from an
-        MQTT topic, confirming a human has looked at it (typically after
-        also giving it a real name and serial number).
-        """
+        """Clear pending_review once a human has confirmed an auto-created device."""
 
         device = self.get_object()
         device.pending_review = False

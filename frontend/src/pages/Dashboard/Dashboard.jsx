@@ -56,9 +56,7 @@ function Dashboard() {
 
   const { lastUpdated, refreshing, refresh } = useAutoRefresh(loadDashboard);
 
-  // Every alert/device/location click navigates straight to the drilldown
-  // page for that item, so a broken device on the dashboard is always one
-  // click away from its full status (components, health, cameras...).
+  // every row click jumps straight to that item's own detail page
   function handleAlertClick(alert) {
     if (alert.camera_id) {
       navigate(`/cameras/${alert.camera_id}`);
@@ -173,8 +171,7 @@ function Dashboard() {
           </div>
         </article>
 
-        {/* Devices with problems: click straight through to the device
-            page, which now shows full component/health status. */}
+        {/* click through to the device page for full status */}
         <article className="dashboard-panel">
           <div className="panel-header">
             <div>
@@ -251,9 +248,7 @@ function Dashboard() {
           </div>
         </article>
 
-        {/* Detections: real events reported by cameras (smoke, person,
-            etc), not "currently broken" problems — so no severity dot,
-            just a chronological feed. */}
+        {/* real camera events, not "broken" problems -- plain feed, no severity dot */}
         <article className="dashboard-panel">
           <div className="panel-header">
             <div>

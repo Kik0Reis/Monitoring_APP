@@ -1,15 +1,9 @@
-"""
-Database retention / cleanup.
+"""Deletes old heartbeats and resolved alerts so the DB doesn't grow forever.
 
-Devices can send a heartbeat every few seconds, so DeviceHeartbeat is by
-far the fastest-growing table in the app. A device's *current* health is
-always available on the Device row itself (status, last_seen, health_data),
-so old heartbeats are only useful for a short historical window — we don't
-need to keep them forever.
-
-This module deletes heartbeats older than a configurable cutoff. It's
-called periodically by the heartbeat_worker management command, and can
-also be run on demand via `manage.py cleanup_heartbeats`.
+DeviceHeartbeat grows fast (devices can heartbeat every few seconds), but
+current health always lives on the Device row itself, so old heartbeats
+only matter for a short historical window. Called periodically by
+heartbeat_worker, or on demand via manage.py cleanup_heartbeats.
 """
 
 import logging
@@ -29,11 +23,7 @@ DEFAULT_BATCH_SIZE = 5000
 def delete_old_heartbeats(
     retention_days: int | None = None, batch_size: int = DEFAULT_BATCH_SIZE
 ) -> int:
-    """
-    Delete DeviceHeartbeat rows older than `retention_days`.
-
-    Returns the total number of rows deleted.
-    """
+    """Delete DeviceHeartbeat rows older than retention_days. Returns rows deleted."""
 
     if retention_days is None:
         retention_days = settings.HEARTBEAT_RETENTION_DAYS
@@ -43,9 +33,7 @@ def delete_old_heartbeats(
     total_deleted = 0
 
     while True:
-        # Grab a batch of old row ids and delete just those. This keeps
-        # each individual DELETE small and fast instead of taking one big
-        # lock on the whole table.
+        # delete in id batches so we're not holding one big table lock
         stale_ids = list(
             DeviceHeartbeat.objects.filter(received_at__lt=cutoff)
             .order_by("id")
@@ -74,11 +62,10 @@ def delete_old_heartbeats(
 def delete_old_resolved_alerts(
     retention_days: int | None = None, batch_size: int = DEFAULT_BATCH_SIZE
 ) -> int:
-    """
-    Delete resolved DeviceAlert/CameraAlert rows (active=False) whose
-    resolved_at is older than `retention_days`. Active alerts are never
-    touched -- only resolved_at__lt=cutoff can match, and active alerts
-    always have resolved_at=None.
+    """Delete resolved alerts (active=False) older than retention_days.
+
+    Active alerts are never touched -- they always have resolved_at=None,
+    so the resolved_at__lt=cutoff filter can't match them.
     """
 
     if retention_days is None:

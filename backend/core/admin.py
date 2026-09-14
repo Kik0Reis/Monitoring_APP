@@ -1,3 +1,4 @@
 from django.contrib import admin
 
-# Register your models here.
+# Nothing registered here yet -- settings are managed via /api/settings/,
+# not the Django admin.

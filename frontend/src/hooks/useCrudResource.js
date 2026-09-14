@@ -1,13 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 
 /**
- * Centralizes the CRUD + search + pagination logic that used to be
- * copy-pasted (with small drifting differences) across every list page
- * (Countries, Clients, Locations, Devices, Cameras).
- *
- * A resource page only needs to describe *what* it is (its API client,
- * its empty form shape, how to turn form state into an API payload) and
- * gets loading/search/pagination/create/edit/delete for free.
+ * Shared CRUD + search + pagination logic for every list page (Countries,
+ * Clients, Locations, Devices, Cameras) so they don't each reimplement it.
+ * A page just describes its API client and form shape, this handles the rest.
  *
  * @param {object} config
  * @param {object} config.api - { list, get, create, update, delete }
@@ -16,7 +12,6 @@ import { useCallback, useEffect, useState } from "react";
  * @param {(formData: object) => string|null} [config.validate] - return an error message, or null
  * @param {(item: object) => object} [config.mapItemToFormData] - defaults to identity
  * @param {Record<string, string|number>} [config.filters] - fixed filters always sent to the API
- *        (e.g. { country: countryId } when this list lives inside a drilldown page)
  * @param {(item: object) => string} [config.describeItem] - used in the delete confirmation
  */
 export function useCrudResource({
@@ -76,7 +71,7 @@ export function useCrudResource({
         setNext(data.next ?? null);
         setPrevious(data.previous ?? null);
       } else {
-        // Non-paginated response (plain array).
+        // plain array response, not paginated
         const list = data ?? [];
         setItems(list);
         setCount(list.length);
@@ -97,10 +92,8 @@ export function useCrudResource({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [load]);
 
-  // Reset to page 1 whenever the search term or fixed filters change.
-  // (Deliberately not a useEffect: this is the React-recommended
-  // "adjust state during render" pattern, using state — not a ref — to
-  // remember the previous key, since refs can't be read during render.)
+  // reset to page 1 when search/filters change -- adjusting state during
+  // render (React's recommended pattern) rather than a useEffect
   const [previousFilterKey, setPreviousFilterKey] = useState(
     `${search}|${filtersKey}`
   );
