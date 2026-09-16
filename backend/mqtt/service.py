@@ -10,6 +10,7 @@ from monitoring.services.camera_monitor import (
     get_camera,
     process_camera_detection,
     process_camera_info_list,
+    process_camera_license_list,
     process_camera_status_list,
 )
 from monitoring.services.device_health import (
@@ -28,6 +29,7 @@ logger = logging.getLogger(__name__)
 DEVICE_MESSAGE_TYPES = {
     "device_info",
     "camera_info",
+    "camera_licenses",
     "overall_health",
     "health_cameras",
     "health_edge_device",
@@ -103,6 +105,16 @@ def _handle_device_message(message_type, device, parsed_message):
         device.refresh_from_db()
         logger.info(
             "MQTT camera info processed: device=%s cameras=%s", device, processed
+        )
+        return device
+
+    if message_type == "camera_licenses":
+        processed = process_camera_license_list(device=device, payload=payload_data)
+        device.refresh_from_db()
+        logger.info(
+            "MQTT camera license info processed: device=%s cameras=%s",
+            device,
+            processed,
         )
         return device
 

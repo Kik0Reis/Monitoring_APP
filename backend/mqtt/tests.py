@@ -478,6 +478,89 @@ class MQTTServiceTests(TestCase):
 
         self.assertEqual(camera.name, "Front Door Camera")
 
+    # Camera license message
+
+    def test_license_message_stores_license_data_on_matching_camera(self):
+        """
+        Simulate:
+
+        aiaction/pt/aitecserv/office2/edge-01/info/licenses
+        """
+
+        camera = Camera.objects.create(
+            device=self.device,
+            camera_identifier="AXIS-B8A44F957EC7",
+            channel=1,
+            name="Fire Camera",
+        )
+
+        topic = "aiaction/" "pt/" "aitecserv/" "office2/" "edge-01/" "info/" "licenses"
+
+        payload = {
+            "timestamp": "2026-09-16T07:26:19+01:00",
+            "source": "aiaction",
+            "licenses": [
+                {
+                    "camera_id": "AXIS-B8A44F957EC7",
+                    "camera_name": "Fire Camera",
+                    "channel_number": 1,
+                    "licensed": True,
+                    "status": True,
+                    "begin_date": "2026-09-16",
+                    "end_date": "2027-09-17",
+                    "days_left": 366,
+                    "last_validation_ok": True,
+                    "last_validation_error": None,
+                    "last_validation_at": "2026-09-16T11:56:19.762664",
+                },
+                {
+                    "camera_id": "Test-1",
+                    "camera_name": "Test Camera",
+                    "channel_number": 1,
+                    "licensed": False,
+                    "status": None,
+                    "begin_date": None,
+                    "end_date": None,
+                    "days_left": None,
+                    "last_validation_ok": None,
+                    "last_validation_error": None,
+                    "last_validation_at": None,
+                },
+            ],
+        }
+
+        process_mqtt_message(topic=topic, payload=payload)
+
+        camera.refresh_from_db()
+
+        self.assertTrue(camera.license_data["licensed"])
+        self.assertEqual(camera.license_data["days_left"], 366)
+
+    def test_license_message_skips_unknown_camera(self):
+        """
+        A license entry for a camera_id the device hasn't provisioned yet
+        (e.g. an unused "Test-1" slot) must not create a Camera record.
+        """
+
+        topic = "aiaction/" "pt/" "aitecserv/" "office2/" "edge-01/" "info/" "licenses"
+
+        payload = {
+            "licenses": [
+                {
+                    "camera_id": "Test-1",
+                    "channel_number": 1,
+                    "licensed": False,
+                    "status": None,
+                }
+            ]
+        }
+
+        process_mqtt_message(topic=topic, payload=payload)
+
+        self.assertFalse(
+            Camera.objects.filter(device=self.device, camera_identifier="Test-1").exists()
+        )
+
     # Device-level issue message
 
     def test_issue_message_creates_device_error_alert(self):

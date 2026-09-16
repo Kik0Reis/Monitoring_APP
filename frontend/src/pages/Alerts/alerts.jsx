@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 
 import { problemsApi, detectionsApi } from "../../services/api";
 import { useAutoRefresh } from "../../hooks/useAutoRefresh";
+import { formatTimestamp } from "../../utils/formatTimestamp";
 
 import PageHeader from "../../components/common/PageHeader";
 import StatusBadge, { StatusDot } from "../../components/common/StatusBadge";
@@ -15,11 +16,6 @@ function severityToStatus(severity) {
   if (value === "critical" || value === "error") return "critical";
   if (value === "warning") return "warning";
   return "info";
-}
-
-function formatTimestamp(value) {
-  if (!value) return "—";
-  return new Date(value).toLocaleString();
 }
 
 function AlertRow({ alert, onClick, showStatus = true }) {

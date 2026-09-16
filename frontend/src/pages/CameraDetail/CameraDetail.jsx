@@ -11,7 +11,7 @@ import FormField from "../../components/common/FormField";
 import StatusBadge from "../../components/common/StatusBadge";
 import PendingReviewBadge from "../../components/common/PendingReviewBadge";
 import NotOnMqttBadge from "../../components/common/NotOnMqttBadge";
-import { formatTimestamp } from "../../components/common/ComponentCard";
+import { formatTimestamp } from "../../utils/formatTimestamp";
 
 import CrudModal from "../../components/crud/CrudModal";
 
@@ -175,6 +175,71 @@ function CameraDetail() {
             </div>
           </div>
         </div>
+      )}
+
+      {camera && camera.license_data && Object.keys(camera.license_data).length > 0 && (
+        <section className="detail-section">
+          <div className="detail-section-header">
+            <h3>License</h3>
+          </div>
+
+          <div className="component-detail-list">
+            <div className="component-detail-row">
+              <span>Licensed</span>
+              <StatusBadge
+                status={camera.license_data.licensed ? "online" : "critical"}
+                label={camera.license_data.licensed ? "Licensed" : "Not Licensed"}
+              />
+            </div>
+
+            {camera.license_data.begin_date && (
+              <div className="component-detail-row">
+                <span>Begin Date</span>
+                <strong>{camera.license_data.begin_date}</strong>
+              </div>
+            )}
+
+            {camera.license_data.end_date && (
+              <div className="component-detail-row">
+                <span>End Date</span>
+                <strong>{camera.license_data.end_date}</strong>
+              </div>
+            )}
+
+            {camera.license_data.days_left !== null &&
+              camera.license_data.days_left !== undefined && (
+                <div className="component-detail-row">
+                  <span>Days Left</span>
+                  <strong>{camera.license_data.days_left}</strong>
+                </div>
+              )}
+
+            {camera.license_data.last_validation_ok !== null &&
+              camera.license_data.last_validation_ok !== undefined && (
+                <div className="component-detail-row">
+                  <span>Last Validation</span>
+                  <StatusBadge
+                    status={camera.license_data.last_validation_ok ? "online" : "warning"}
+                    label={camera.license_data.last_validation_ok ? "Validated" : "Failed"}
+                  />
+                </div>
+              )}
+
+            {camera.license_data.last_validation_error && (
+              <div className="component-detail-row">
+                <span>Validation Error</span>
+                <strong>{camera.license_data.last_validation_error}</strong>
+              </div>
+            )}
+
+            {camera.license_data.last_validation_at && (
+              <div className="component-detail-row">
+                <span>Last Validated At</span>
+                <strong>{formatTimestamp(camera.license_data.last_validation_at)}</strong>
+              </div>
+            )}
+          </div>
+        </section>
       )}
 
       {camera && camera.alerts && camera.alerts.some((alert) => alert.active) && (

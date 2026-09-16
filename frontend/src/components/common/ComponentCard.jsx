@@ -1,13 +1,5 @@
 import StatusBadge from "./StatusBadge";
-
-export function formatTimestamp(value) {
-  if (!value) return "—";
-  try {
-    return new Date(value).toLocaleString();
-  } catch {
-    return String(value);
-  }
-}
+import { formatTimestamp } from "../../utils/formatTimestamp";
 
 /**
  * Renders one health-component payload (e.g. detectorapi/detector/idmr)

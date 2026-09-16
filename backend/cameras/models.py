@@ -47,6 +47,11 @@ class Camera(TimeStampedModel):
     #   {"detectorapi": {"stage": "idle", ...}, "detector": {"healthy": true, ...}}
     health_data = models.JSONField(default=dict, blank=True)
 
+    # License status reported on aiaction/.../info/licenses, keyed by
+    # nothing in particular -- it's just the raw entry for this camera
+    # (licensed, status, begin_date, end_date, days_left, last_validation_*).
+    license_data = models.JSONField(default=dict, blank=True)
+
     active = models.BooleanField(default=True)
 
     # True for cameras auto-created from an MQTT topic (the device's

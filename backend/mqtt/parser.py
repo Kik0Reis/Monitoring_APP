@@ -14,6 +14,7 @@ def parse_topic(topic: str) -> dict[str, Any]:
 
     aiaction/{country}/{client}/{installation}/{device_id}/info/edge-device
     aiaction/{country}/{client}/{installation}/{device_id}/info/cameras
+    aiaction/{country}/{client}/{installation}/{device_id}/info/licenses
     aiaction/{country}/{client}/{installation}/{device_id}/health/overall-health
     aiaction/{country}/{client}/{installation}/{device_id}/health/cameras
     aiaction/{country}/{client}/{installation}/{device_id}/health/edge-device
@@ -71,6 +72,9 @@ def parse_topic(topic: str) -> dict[str, Any]:
 
     if category == "info" and len(parts) == 7 and parts[6] == "cameras":
         return {"message_type": "camera_info", **base}
+
+    if category == "info" and len(parts) == 7 and parts[6] == "licenses":
+        return {"message_type": "camera_licenses", **base}
 
     if category == "health" and len(parts) == 7:
         health_topic = parts[6]

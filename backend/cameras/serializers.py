@@ -43,6 +43,9 @@ class CameraSerializer(serializers.ModelSerializer):
             # Per-component (detectorapi/detector/idmr) breakdown for this
             # specific camera, extracted from the device's health messages.
             "health_data",
+            # Per-camera license status extracted from the device's
+            # aiaction/.../info/licenses messages.
+            "license_data",
 
             "active",
             "breadcrumb",
@@ -63,6 +66,7 @@ class CameraSerializer(serializers.ModelSerializer):
             "latitude",
             "longitude",
             "health_data",
+            "license_data",
             "alerts",
 
             "pending_review",

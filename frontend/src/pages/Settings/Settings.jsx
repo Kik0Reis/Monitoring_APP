@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 
 import PageHeader from "../../components/common/PageHeader";
 import FormField from "../../components/common/FormField";
@@ -31,23 +31,35 @@ function Settings() {
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError("");
-
-    try {
-      const data = await settingsApi.get();
-      setForm({ ...EMPTY_FORM, ...data, mqtt_password: "" });
-    } catch (err) {
-      setError(err.message || "Failed to load settings.");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
   useEffect(() => {
+    let ignore = false;
+
+    async function load() {
+      setLoading(true);
+      setError("");
+
+      try {
+        const data = await settingsApi.get();
+        if (!ignore) {
+          setForm({ ...EMPTY_FORM, ...data, mqtt_password: "" });
+        }
+      } catch (err) {
+        if (!ignore) {
+          setError(err.message || "Failed to load settings.");
+        }
+      } finally {
+        if (!ignore) {
+          setLoading(false);
+        }
+      }
+    }
+
     load();
-  }, [load]);
+
+    return () => {
+      ignore = true;
+    };
+  }, []);
 
   const handleChange = (event) => {
     const { name, type, value, checked } = event.target;

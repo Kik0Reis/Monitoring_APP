@@ -15,7 +15,7 @@ from devices.models import Device, DeviceStatus, DeviceType
 from locations.models import Location
 from monitoring.services.camera_monitor import (
     create_camera_offline_alert,
-    process_camera_alert,
+    process_camera_detection,
 )
 from monitoring.services.dashboard import (
     get_camera_detections,
@@ -71,7 +71,7 @@ class DashboardProblemsAndDetectionsTests(TestCase):
         self.assertIn("1 camera(s) offline", location["issues"])
 
     def test_dashboard_data_includes_recent_detections(self):
-        process_camera_alert(
+        process_camera_detection(
             camera=self.camera,
             payload={
                 "action_code": "HighProbFireDetected",

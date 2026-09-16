@@ -255,6 +255,67 @@ def process_camera_info_list(
     return processed
 
 
+@transaction.atomic
+def process_camera_license_list(
+    device, payload: dict[str, Any], received_at=None
+) -> int:
+    """Process aiaction/.../info/licenses: per-camera license status.
+
+    {"licenses": [{"camera_id": "AXIS-...", "camera_name": "...", "channel_number": 1,
+                   "licensed": true, "status": true, "begin_date": "...",
+                   "end_date": "...", "days_left": 366, "last_validation_ok": true,
+                   "last_validation_error": null, "last_validation_at": "..."}]}
+
+    Stored as-is on Camera.license_data. Unlike process_camera_info_list,
+    this never auto-creates cameras -- a license entry (e.g. an unused
+    "Test-1" slot) doesn't necessarily correspond to a real camera the
+    device has actually reported yet, so unmatched entries are just
+    skipped and logged.
+    """
+
+    if received_at is None:
+        received_at = timezone.now()
+
+    licenses = payload.get("licenses", [])
+
+    if not isinstance(licenses, list):
+        return 0
+
+    processed = 0
+
+    for license_entry in licenses:
+        if not isinstance(license_entry, dict):
+            continue
+
+        camera_identifier = license_entry.get("camera_id")
+        channel = license_entry.get("channel_number")
+
+        if not camera_identifier or channel is None:
+            continue
+
+        camera = get_camera(
+            device=device, camera_identifier=camera_identifier, channel=channel
+        )
+
+        if camera is None:
+            logger.warning(
+                "Received MQTT license info for unknown camera: "
+                "device=%s camera=%s channel=%s",
+                device,
+                camera_identifier,
+                channel,
+            )
+            continue
+
+        camera.license_data = license_entry
+        camera.save(update_fields=["license_data", "updated_at"])
+
+        reconcile_state.record_camera_seen(camera.id)
+        processed += 1
+
+    return processed
+
+
 def update_camera_component_health(
     device, source: str, component_payload: dict[str, Any]
 ) -> int:

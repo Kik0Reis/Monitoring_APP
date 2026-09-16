@@ -13,7 +13,8 @@ import FormField from "../../components/common/FormField";
 import StatusBadge from "../../components/common/StatusBadge";
 import PendingReviewBadge from "../../components/common/PendingReviewBadge";
 import NotOnMqttBadge from "../../components/common/NotOnMqttBadge";
-import ComponentCard, { formatTimestamp } from "../../components/common/ComponentCard";
+import ComponentCard from "../../components/common/ComponentCard";
+import { formatTimestamp } from "../../utils/formatTimestamp";
 
 import CrudModal from "../../components/crud/CrudModal";
 
