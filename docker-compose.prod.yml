@@ -1,0 +1,94 @@
+services:
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    container_name: monitoring-backend
+
+    # No "ports:" here on purpose. Gunicorn is only reachable from other
+    # containers on this compose network (the "frontend" service talks
+    # to it as http://backend:8000) -- it is never exposed to the host,
+    # unlike in docker-compose.yml (dev).
+
+    env_file:
+      - ./backend/.env.prod
+
+    restart: unless-stopped
+
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+    container_name: monitoring-frontend
+
+    # This is the ONLY port this stack exposes to the host. Change the
+    # left-hand side (e.g. "8080:80") if port 80 is already taken on the
+    # server -- see notes at the bottom of this file.
+    ports:
+      - "80:80"
+
+    depends_on:
+      - backend
+
+    restart: unless-stopped
+
+
+  app-mqtt:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    container_name: monitoring-app-subscriber
+
+    env_file:
+      - ./backend/.env.prod
+
+    command:
+      - python
+      - manage.py
+      - mqtt_subscriber
+
+    restart: unless-stopped
+
+
+  heartbeat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    container_name: monitoring-heartbeat
+
+    env_file:
+      - ./backend/.env.prod
+
+    command:
+      - python
+      - manage.py
+      - heartbeat_worker
+      - --timeout
+      - "60"
+      - --interval
+      - "10"
+
+    restart: unless-stopped
+
+# ---------------------------------------------------------------------
+# Notes
+# ---------------------------------------------------------------------
+# 1. Build & run:
+#      docker compose -f docker-compose.prod.yml up --build -d
+#
+# 2. Keep using docker-compose.yml (dev) unchanged for local development
+#    with hot-reload -- e.g. `docker compose up`.
+#
+# 3. If ports 80/443 are already used on this server by something else,
+#    just change the frontend's "ports" mapping, e.g. "8080:80", and
+#    access the app at http://<server>:8080/ instead.
+#
+# 4. To restrict access to a private network only (e.g. Tailscale), bind
+#    to that interface's IP instead of 0.0.0.0, e.g.:
+#      ports:
+#        - "100.x.x.x:80:80"
+#    or bind to 127.0.0.1 and reach it only through an SSH tunnel:
+#      ports:
+#        - "127.0.0.1:80:80"

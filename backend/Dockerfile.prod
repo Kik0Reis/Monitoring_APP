@@ -1,0 +1,31 @@
+FROM python:3.12-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --upgrade pip \
+    && pip install --no-cache-dir -r requirements.txt
+
+# Unlike docker-compose.yml (dev), the code is copied INTO the image here
+# instead of being bind-mounted from the host. A production image should
+# be a self-contained, immutable artifact — no live-reload, no editing
+# code on a running container.
+COPY . .
+
+# Needs SECRET_KEY/DEBUG/etc at build time only to run collectstatic;
+# actual values are supplied at run time via env_file in
+# docker-compose.prod.yml. dummy values here just let the command run.
+RUN SECRET_KEY=collectstatic-only DEBUG=False ALLOWED_HOSTS=localhost \
+    python manage.py collectstatic --noinput
+
+EXPOSE 8000
+
+# Gunicorn instead of `manage.py runserver`: runserver is single-threaded
+# and Django's own docs say it must not be used in production. This port
+# is not published to the host in docker-compose.prod.yml — only the
+# `frontend` (nginx) service talks to it, over the internal docker
+# network, and proxies /api/, /admin/ and /static/ to it.
+CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "3"]
