@@ -31,7 +31,7 @@ services:
     # left-hand side (e.g. "8080:80") if port 80 is already taken on the
     # server -- see notes at the bottom of this file.
     ports:
-      - "127.0.0.1:80:80"
+      - "127.0.0.1:80"
 
     depends_on:
       - backend
