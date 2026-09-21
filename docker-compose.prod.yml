@@ -14,6 +14,10 @@ services:
     env_file:
       - ./backend/.env.prod
 
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
     restart: unless-stopped
 
 
@@ -49,6 +53,10 @@ services:
       - manage.py
       - mqtt_subscriber
 
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
     restart: unless-stopped
 
 
@@ -70,7 +78,28 @@ services:
       - --interval
       - "10"
 
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
     restart: unless-stopped
+
+  migrate:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    container_name: monitoring-migrate
+
+    env_file:
+      - ./backend/.env.prod
+
+    command:
+      - python
+      - manage.py
+      - migrate
+      - --noinput
+
+    restart: "no"
 
 # ---------------------------------------------------------------------
 # Notes
@@ -80,15 +109,4 @@ services:
 #
 # 2. Keep using docker-compose.yml (dev) unchanged for local development
 #    with hot-reload -- e.g. `docker compose up`.
-#
-# 3. If ports 80/443 are already used on this server by something else,
-#    just change the frontend's "ports" mapping, e.g. "8080:80", and
-#    access the app at http://<server>:8080/ instead.
-#
-# 4. To restrict access to a private network only (e.g. Tailscale), bind
-#    to that interface's IP instead of 0.0.0.0, e.g.:
-#      ports:
-#        - "100.x.x.x:80:80"
-#    or bind to 127.0.0.1 and reach it only through an SSH tunnel:
-#      ports:
-#        - "127.0.0.1:80:80"
+
