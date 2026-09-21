@@ -133,7 +133,7 @@ ASGI_APPLICATION = "config.asgi.application"
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
+        "NAME": os.getenv("SQLITE_PATH", str(BASE_DIR / "db.sqlite3")),
         "OPTIONS": {
             # SQLite raises "database is locked" almost immediately by
             # default. This app has THREE processes (backend, the MQTT
@@ -203,11 +203,12 @@ STORAGES = {
 }
 
 
-# TODO: no authentication/permission classes yet — every endpoint is
-# currently open. Add DEFAULT_AUTHENTICATION_CLASSES and
-# DEFAULT_PERMISSION_CLASSES here once auth is in place.
 
 REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": [],
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.AllowAny",
+    ],
     "DEFAULT_FILTER_BACKENDS": [
         "django_filters.rest_framework.DjangoFilterBackend",
         "rest_framework.filters.SearchFilter",
@@ -216,7 +217,6 @@ REST_FRAMEWORK = {
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 10,
 }
-
 
 # Send application logs to the console so they are visible in Docker.
 # This is especially useful for the MQTT worker because it is a

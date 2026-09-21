@@ -7,6 +7,8 @@ __pycache__/
 
 .env
 .env.prod
+.htpasswd
+
 
 media/
 staticfiles/

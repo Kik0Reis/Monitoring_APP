@@ -1,5 +1,33 @@
 services:
 
+  # One-off task: applies pending Django migrations and then exits. The
+  # three long-running services below all wait for this to finish
+  # successfully before starting, so migrations never race against each
+  # other (SQLite in particular does not like concurrent writers).
+  migrate:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    container_name: monitoring-migrate
+
+    env_file:
+      - ./backend/.env.prod
+
+    environment:
+      - SQLITE_PATH=/data/db.sqlite3
+
+    volumes:
+      - sqlite-data:/data
+
+    command:
+      - python
+      - manage.py
+      - migrate
+      - --noinput
+
+    restart: "no"
+
+
   backend:
     build:
       context: ./backend
@@ -8,11 +36,20 @@ services:
 
     # No "ports:" here on purpose. Gunicorn is only reachable from other
     # containers on this compose network (the "frontend" service talks
-    # to it as http://backend:8000) -- it is never exposed to the host,
-    # unlike in docker-compose.yml (dev).
+    # to it as http://backend:8000) -- it is never exposed to the host.
 
     env_file:
       - ./backend/.env.prod
+
+    environment:
+      - SQLITE_PATH=/data/db.sqlite3
+
+    # backend, app-mqtt, heartbeat and migrate all mount this SAME named
+    # volume at the SAME path, so they all read/write the one db.sqlite3
+    # file. Without this, each container gets its own private copy and
+    # writes in one are invisible to the others.
+    volumes:
+      - sqlite-data:/data
 
     depends_on:
       migrate:
@@ -27,11 +64,10 @@ services:
       dockerfile: Dockerfile.prod
     container_name: monitoring-frontend
 
-    # This is the ONLY port this stack exposes to the host. Change the
-    # left-hand side (e.g. "8080:80") if port 80 is already taken on the
-    # server -- see notes at the bottom of this file.
+    # host_port:container_port. Nginx inside this container listens on
+    # 80 (see nginx.conf) -- the container side must be 80, not 8000.
     ports:
-      - "127.0.0.1:80"
+      - "8000:80"
 
     depends_on:
       - backend
@@ -47,6 +83,12 @@ services:
 
     env_file:
       - ./backend/.env.prod
+
+    environment:
+      - SQLITE_PATH=/data/db.sqlite3
+
+    volumes:
+      - sqlite-data:/data
 
     command:
       - python
@@ -69,6 +111,12 @@ services:
     env_file:
       - ./backend/.env.prod
 
+    environment:
+      - SQLITE_PATH=/data/db.sqlite3
+
+    volumes:
+      - sqlite-data:/data
+
     command:
       - python
       - manage.py
@@ -84,29 +132,8 @@ services:
 
     restart: unless-stopped
 
-  migrate:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile.prod
-    container_name: monitoring-migrate
-
-    env_file:
-      - ./backend/.env.prod
-
-    command:
-      - python
-      - manage.py
-      - migrate
-      - --noinput
-
-    restart: "no"
-
-# ---------------------------------------------------------------------
-# Notes
-# ---------------------------------------------------------------------
-# 1. Build & run:
-#      docker compose -f docker-compose.prod.yml up --build -d
-#
-# 2. Keep using docker-compose.yml (dev) unchanged for local development
-#    with hot-reload -- e.g. `docker compose up`.
-
+# Named volume managed by Docker -- keeps the database across
+# `docker compose down`/`up` and rebuilds. Only removed with
+# `docker compose -f docker-compose.prod.yml down -v`.
+volumes:
+  sqlite-data:
