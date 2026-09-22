@@ -1,7 +1,9 @@
 """Builds all the data the frontend dashboard needs. Single source of truth --
 views.py just calls get_dashboard_data()."""
 
+from django.conf import settings
 from django.db.models import Count, Prefetch, Q
+from django.utils import timezone
 
 from cameras.models import Camera, CameraStatus
 from devices.models import Device, DeviceStatus
@@ -62,11 +64,19 @@ def get_camera_detections(limit=50):
     """Most recent real-world detections (CAMERA_ALERT), newest first.
 
     Chronological log, not a "currently broken" list -- no active/resolved
-    filtering, every detection shows.
+    filtering, every detection shows. Restricted to the last
+    settings.DETECTION_RETENTION_DAYS regardless of `limit`, matching what
+    delete_old_detections() physically keeps (see
+    monitoring/services/retention.py) -- the API never implies detections
+    exist that the cleanup job has already removed.
     """
 
+    cutoff = timezone.now() - timezone.timedelta(days=settings.DETECTION_RETENTION_DAYS)
+
     camera_alerts = (
-        CameraAlert.objects.filter(alert_type=CameraAlertType.CAMERA_ALERT)
+        CameraAlert.objects.filter(
+            alert_type=CameraAlertType.CAMERA_ALERT, created_at__gte=cutoff
+        )
         .select_related("camera", "camera__device", "camera__device__location")
         .order_by("-created_at")[:limit]
     )

@@ -8,7 +8,12 @@ from monitoring.services.heartbeat_monitor import (
     DEFAULT_HEARTBEAT_TIMEOUT_SECONDS,
     check_all_heartbeats,
 )
-from monitoring.services.retention import delete_old_heartbeats, delete_old_resolved_alerts
+from monitoring.services.retention import (
+    delete_old_detections,
+    delete_old_heartbeats,
+    delete_old_resolved_alerts,
+    resolve_stale_alerts,
+)
 
 
 class Command(BaseCommand):
@@ -46,7 +51,10 @@ class Command(BaseCommand):
                 f"interval={interval_seconds}s, "
                 f"cleanup every {options['cleanup_interval_hours']}h "
                 f"(keeping {settings.HEARTBEAT_RETENTION_DAYS} days of heartbeats, "
-                f"{settings.ALERT_RETENTION_DAYS} days of resolved alerts)"
+                f"{settings.ALERT_RETENTION_DAYS} days of resolved alerts, "
+                f"{settings.DETECTION_RETENTION_DAYS} days of detections; "
+                f"auto-resolving stale error alerts after "
+                f"{settings.ALERT_STALE_HOURS}h of MQTT silence)"
             )
         )
 
@@ -84,6 +92,26 @@ class Command(BaseCommand):
                         self.style.SUCCESS(
                             f"Alert cleanup: removed {deleted_alerts} "
                             "old resolved alert(s)."
+                        )
+                    )
+
+                resolved_stale = resolve_stale_alerts()
+
+                if resolved_stale:
+                    self.stdout.write(
+                        self.style.SUCCESS(
+                            f"Stale alert cleanup: auto-resolved {resolved_stale} "
+                            "alert(s) no longer reported on MQTT."
+                        )
+                    )
+
+                deleted_detections = delete_old_detections()
+
+                if deleted_detections:
+                    self.stdout.write(
+                        self.style.SUCCESS(
+                            f"Detection cleanup: removed {deleted_detections} "
+                            "old detection(s)."
                         )
                     )
 

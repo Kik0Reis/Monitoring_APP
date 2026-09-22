@@ -1,5 +1,5 @@
 """
-Read/write backend/.env directly.
+Read/write the .env file backing the running process directly.
 
 This is deliberately the ONLY store for the runtime configuration exposed
 on the Settings page (MQTT connection, reconciliation timing, heartbeat
@@ -9,14 +9,32 @@ page is just a friendlier way to edit it.
 
 Comments, blank lines, and any key this app doesn't ask to change are
 copied through completely untouched when saving.
+
+Which file: in dev, docker-compose.yml bind-mounts the whole backend/
+folder, so backend/.env (the file this process actually reads its own
+config from via config/settings.py's os.getenv() calls) is directly
+visible and writable here too -- reads/writes naturally match reality.
+
+In production there is no backend/.env at all: docker-compose.prod.yml
+loads backend/.env.prod as `env_file:`, which Compose reads on the HOST
+and injects as plain environment variables -- the file itself normally
+never enters the container's filesystem (see backend/.dockerignore). So
+docker-compose.prod.yml bind-mounts just that one file into the backend
+service and sets MONITORING_ENV_FILE to point at it, keeping the same
+"edit the file that's actually driving this process" guarantee in both
+environments. The DEBUG-based fallback below only matters if
+MONITORING_ENV_FILE isn't set for some reason.
 """
 
 import os
 import re
 from pathlib import Path
 
+_DEFAULT_ENV_FILENAME = ".env" if os.getenv("DEBUG") == "True" else ".env.prod"
+
 ENV_PATH = Path(
-    os.getenv("MONITORING_ENV_FILE") or (Path(__file__).resolve().parent.parent / ".env")
+    os.getenv("MONITORING_ENV_FILE")
+    or (Path(__file__).resolve().parent.parent / _DEFAULT_ENV_FILENAME)
 )
 
 # Matches "KEY=value" / "export KEY=value" lines, capturing the key and

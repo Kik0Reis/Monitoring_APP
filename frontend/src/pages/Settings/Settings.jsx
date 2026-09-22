@@ -22,6 +22,8 @@ const EMPTY_FORM = {
   heartbeat_retention_days: "",
   heartbeat_cleanup_interval_hours: "",
   alert_retention_days: "",
+  alert_stale_hours: "",
+  detection_retention_days: "",
 };
 
 function Settings() {
@@ -85,6 +87,8 @@ function Settings() {
       heartbeat_retention_days: Number(form.heartbeat_retention_days),
       heartbeat_cleanup_interval_hours: Number(form.heartbeat_cleanup_interval_hours),
       alert_retention_days: Number(form.alert_retention_days),
+      alert_stale_hours: Number(form.alert_stale_hours),
+      detection_retention_days: Number(form.detection_retention_days),
     };
 
     if (!payload.mqtt_password) {
@@ -244,6 +248,39 @@ function Settings() {
                   max: 3650,
                 }}
                 value={form.alert_retention_days}
+                onChange={handleChange}
+                disabled={saving}
+              />
+              <FormField
+                field={{
+                  name: "alert_stale_hours",
+                  label: "Auto-resolve error alerts after (hours)",
+                  type: "number",
+                  min: 1,
+                  max: 720,
+                }}
+                value={form.alert_stale_hours}
+                onChange={handleChange}
+                disabled={saving}
+              />
+            </div>
+          </section>
+
+          <section className="detail-section">
+            <div className="detail-section-header">
+              <h3>Detection Retention</h3>
+            </div>
+            <p className="settings-section-hint">{RESTART_HEARTBEAT}</p>
+            <div className="settings-grid">
+              <FormField
+                field={{
+                  name: "detection_retention_days",
+                  label: "Keep detections (days)",
+                  type: "number",
+                  min: 1,
+                  max: 3650,
+                }}
+                value={form.detection_retention_days}
                 onChange={handleChange}
                 disabled={saving}
               />

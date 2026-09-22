@@ -30,3 +30,13 @@ class AppSettingsSerializer(serializers.Serializer):
     )
 
     alert_retention_days = serializers.IntegerField(min_value=1, max_value=3650)
+
+    # How long a DEVICE_ERROR/CAMERA_ERROR alert can go without being
+    # re-reported on MQTT before it's auto-resolved (see
+    # monitoring/services/retention.py:resolve_stale_alerts).
+    alert_stale_hours = serializers.IntegerField(min_value=1, max_value=720)
+
+    # How many days of camera detections (smoke/person/etc events) to
+    # keep and show (see
+    # monitoring/services/retention.py:delete_old_detections).
+    detection_retention_days = serializers.IntegerField(min_value=1, max_value=3650)

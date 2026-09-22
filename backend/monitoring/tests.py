@@ -579,3 +579,183 @@ class HeartbeatTimeoutTests(TestCase):
                 device=self.device, alert_type=AlertType.DEVICE_OFFLINE, active=True
             ).exists()
         )
+
+
+class RetentionServiceTests(TestCase):
+    """
+    Tests for monitoring/services/retention.py's stale-alert auto-resolve
+    and detection retention -- these guard the exact behaviour requested:
+    an error alert or detection no longer being reported on MQTT should
+    not stay "active"/visible forever.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.country = Country.objects.create(name="Portugal", code="PT")
+        cls.customer = Customer.objects.create(country=cls.country, name="aitecserv")
+        cls.location = Location.objects.create(customer=cls.customer, name="office2")
+
+        cls.device = Device.objects.create(
+            location=cls.location,
+            name="Edge 01",
+            mqtt_identifier="edge-01",
+            serial_number="EDGE-001",
+            device_type=DeviceType.EDGE,
+            status=DeviceStatus.ONLINE,
+        )
+
+        cls.camera = Camera.objects.create(
+            device=cls.device,
+            camera_identifier="AXIS-1",
+            channel=1,
+            name="Front door",
+            status=CameraStatus.ONLINE,
+        )
+
+    def test_create_device_issue_alert_bumps_last_seen_on_reuse(self):
+        from monitoring.services.device_health import create_device_issue_alert
+
+        alert = create_device_issue_alert(
+            device=self.device, issue_name="disk_full", payload={}
+        )
+        alert.last_seen_at = timezone.now() - timedelta(hours=10)
+        alert.save(update_fields=["last_seen_at"])
+
+        # Same issue reported again -- must reuse the row (not duplicate
+        # it) and refresh last_seen_at.
+        reused = create_device_issue_alert(
+            device=self.device, issue_name="disk_full", payload={}
+        )
+
+        self.assertEqual(alert.id, reused.id)
+        self.assertEqual(
+            DeviceAlert.objects.filter(
+                device=self.device, alert_type=AlertType.DEVICE_ERROR
+            ).count(),
+            1,
+        )
+        reused.refresh_from_db()
+        self.assertGreater(reused.last_seen_at, timezone.now() - timedelta(minutes=1))
+
+    def test_resolve_stale_alerts_resolves_alert_not_reseen_on_mqtt(self):
+        from monitoring.services.device_health import create_device_issue_alert
+        from monitoring.services.retention import resolve_stale_alerts
+
+        stale_alert = create_device_issue_alert(
+            device=self.device, issue_name="disk_full", payload={}
+        )
+        stale_alert.last_seen_at = timezone.now() - timedelta(hours=25)
+        stale_alert.save(update_fields=["last_seen_at"])
+
+        fresh_alert = create_device_issue_alert(
+            device=self.device, issue_name="high_temp", payload={}
+        )
+        # last_seen_at defaults to now() -- still well within 24h.
+
+        resolved_count = resolve_stale_alerts(stale_after_hours=24)
+
+        self.assertEqual(resolved_count, 1)
+
+        stale_alert.refresh_from_db()
+        self.assertFalse(stale_alert.active)
+        self.assertIsNotNone(stale_alert.resolved_at)
+
+        fresh_alert.refresh_from_db()
+        self.assertTrue(fresh_alert.active)
+
+    def test_resolve_stale_alerts_does_not_touch_offline_alerts(self):
+        """
+        A device that is still genuinely offline must not be auto-resolved
+        just because time passed -- only issue-style alerts (DEVICE_ERROR/
+        CAMERA_ERROR) are eligible for time-based staleness.
+        """
+
+        from monitoring.services.device_health import create_offline_alert
+        from monitoring.services.retention import resolve_stale_alerts
+
+        offline_alert = create_offline_alert(self.device)
+        DeviceAlert.objects.filter(id=offline_alert.id).update(
+            last_seen_at=timezone.now() - timedelta(days=5)
+        )
+
+        resolve_stale_alerts(stale_after_hours=24)
+
+        offline_alert.refresh_from_db()
+        self.assertTrue(offline_alert.active)
+
+    def test_detection_creates_a_new_row_every_time(self):
+        """
+        Regression test: detections used to dedupe onto a single active
+        CameraAlert row (like problem alerts do), so repeated detections
+        silently overwrote each other instead of building a history.
+        """
+
+        from monitoring.services.camera_monitor import process_camera_detection
+
+        process_camera_detection(
+            camera=self.camera,
+            payload={"action_code": "SMOKE", "class_label": "smoke", "confidence": 0.9},
+        )
+        process_camera_detection(
+            camera=self.camera,
+            payload={"action_code": "SMOKE", "class_label": "smoke", "confidence": 0.95},
+        )
+
+        self.assertEqual(
+            CameraAlert.objects.filter(
+                camera=self.camera, alert_type=CameraAlertType.CAMERA_ALERT
+            ).count(),
+            2,
+        )
+
+    def test_delete_old_detections_removes_only_old_rows(self):
+        from monitoring.services.retention import delete_old_detections
+
+        old = CameraAlert.objects.create(
+            camera=self.camera,
+            alert_type=CameraAlertType.CAMERA_ALERT,
+            severity=AlertSeverity.WARNING,
+            message="old detection",
+        )
+        CameraAlert.objects.filter(id=old.id).update(
+            created_at=timezone.now() - timedelta(days=11)
+        )
+
+        recent = CameraAlert.objects.create(
+            camera=self.camera,
+            alert_type=CameraAlertType.CAMERA_ALERT,
+            severity=AlertSeverity.WARNING,
+            message="recent detection",
+        )
+
+        deleted = delete_old_detections(retention_days=10)
+
+        self.assertEqual(deleted, 1)
+        self.assertFalse(CameraAlert.objects.filter(id=old.id).exists())
+        self.assertTrue(CameraAlert.objects.filter(id=recent.id).exists())
+
+    def test_get_camera_detections_excludes_rows_past_retention_window(self):
+        from monitoring.services.dashboard import get_camera_detections
+
+        old = CameraAlert.objects.create(
+            camera=self.camera,
+            alert_type=CameraAlertType.CAMERA_ALERT,
+            severity=AlertSeverity.WARNING,
+            message="old detection",
+        )
+        CameraAlert.objects.filter(id=old.id).update(
+            created_at=timezone.now() - timedelta(days=11)
+        )
+
+        CameraAlert.objects.create(
+            camera=self.camera,
+            alert_type=CameraAlertType.CAMERA_ALERT,
+            severity=AlertSeverity.WARNING,
+            message="recent detection",
+        )
+
+        with self.settings(DETECTION_RETENTION_DAYS=10):
+            results = get_camera_detections(limit=50)
+
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]["message"], "recent detection")

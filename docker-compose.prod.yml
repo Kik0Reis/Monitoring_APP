@@ -43,6 +43,14 @@ services:
 
     environment:
       - SQLITE_PATH=/data/db.sqlite3
+      # The Settings page (core/env_settings.py) reads/writes whatever
+      # file this points at. Bind-mounting the real .env.prod here (not
+      # baking it into the image) means an edit made through the
+      # Settings page lands in the actual file docker-compose reads on
+      # the host -- without this, .env.prod never even exists inside the
+      # container's filesystem (see backend/.dockerignore), so the
+      # Settings page would read/write an empty, throwaway file instead.
+      - MONITORING_ENV_FILE=/app/.env.prod
 
     # backend, app-mqtt, heartbeat and migrate all mount this SAME named
     # volume at the SAME path, so they all read/write the one db.sqlite3
@@ -50,6 +58,7 @@ services:
     # writes in one are invisible to the others.
     volumes:
       - sqlite-data:/data
+      - ./backend/.env.prod:/app/.env.prod
 
     depends_on:
       migrate:
@@ -67,7 +76,7 @@ services:
     # host_port:container_port. Nginx inside this container listens on
     # 80 (see nginx.conf) -- the container side must be 80, not 8000.
     ports:
-      - "8000:80"
+      - "8080:80"
 
     depends_on:
       - backend

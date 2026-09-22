@@ -58,6 +58,25 @@ HEARTBEAT_CLEANUP_INTERVAL_HOURS = int(
 # (see monitoring/services/retention.py). Active alerts are never touched.
 ALERT_RETENTION_DAYS = int(os.getenv("ALERT_RETENTION_DAYS", "30"))
 
+# Some alerts (DEVICE_ERROR/CAMERA_ERROR, raised from a free-form MQTT
+# "issue" topic) have no "back to normal" message to resolve them the way
+# DEVICE_OFFLINE/DEVICE_HEALTH do -- an issue simply stops being
+# republished once it's fixed. So instead, every time the same issue is
+# re-seen on MQTT its last_seen_at is bumped, and the cleanup cycle
+# auto-resolves any such alert whose last_seen_at is older than this many
+# hours (i.e. it hasn't been re-reported since) -- see
+# monitoring/services/retention.py:resolve_stale_alerts.
+ALERT_STALE_HOURS = int(os.getenv("ALERT_STALE_HOURS", "24"))
+
+# Camera detections (CAMERA_ALERT rows -- smoke/person/etc events) are a
+# chronological log, not a "currently broken" list, so they're kept for a
+# shorter, simpler window: every detection older than this is deleted by
+# the same cleanup cycle, and the dashboard/detections API never returns
+# anything older than this either (see
+# monitoring/services/dashboard.py:get_camera_detections and
+# monitoring/services/retention.py:delete_old_detections).
+DETECTION_RETENTION_DAYS = int(os.getenv("DETECTION_RETENTION_DAYS", "10"))
+
 
 # MQTT presence reconciliation.
 #

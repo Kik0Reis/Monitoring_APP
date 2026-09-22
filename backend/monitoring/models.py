@@ -1,4 +1,5 @@
 from django.db import models
+from django.utils import timezone
 
 from devices.models import Device, DeviceStatus
 
@@ -106,6 +107,17 @@ class DeviceAlert(models.Model):
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
     resolved_at = models.DateTimeField(null=True, blank=True)
 
+    # Bumped every time this same alert is re-reported over MQTT (see
+    # create_device_issue_alert). DEVICE_OFFLINE/DEVICE_HEALTH resolve
+    # immediately on the matching "back to normal" signal, but free-form
+    # DEVICE_ERROR issues have no such signal -- an issue_name simply
+    # stops being republished once fixed. The stale-alert cleanup job
+    # (monitoring.services.retention.resolve_stale_alerts) auto-resolves
+    # any active alert whose last_seen_at is older than
+    # settings.ALERT_STALE_HOURS, so alerts no longer on MQTT don't stay
+    # "active" forever.
+    last_seen_at = models.DateTimeField(default=timezone.now, db_index=True)
+
     # The MQTT payload that triggered this, if there was one — handy for
     # debugging without having to dig through logs.
     raw_payload = models.JSONField(default=dict, blank=True)
@@ -146,6 +158,14 @@ class CameraAlert(models.Model):
     active = models.BooleanField(default=True, db_index=True)
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
     resolved_at = models.DateTimeField(null=True, blank=True)
+
+    # See DeviceAlert.last_seen_at -- same mechanism, kept in step so
+    # CAMERA_ERROR behaves the same way if/when a per-camera issue topic
+    # is added. Not used for CAMERA_ALERT (real detections): those never
+    # reuse a row (see camera_monitor.process_camera_detection), so
+    # last_seen_at just equals created_at for them and is harmless.
+    last_seen_at = models.DateTimeField(default=timezone.now, db_index=True)
+
     raw_payload = models.JSONField(default=dict, blank=True)
 
     class Meta:

@@ -89,15 +89,16 @@ function Alerts() {
     }
   }, []);
 
-  const loadActiveTab = useCallback(async () => {
-    if (tab === "problems") {
-      await loadProblems();
-    } else {
-      await loadDetections();
-    }
-  }, [tab, loadProblems, loadDetections]);
+  // Load both, not just the active tab's data -- otherwise the
+  // Detections tab count stays at 0 until you actually click it once
+  // (and vice versa for Problems), since the other tab's fetch never
+  // ran. Both endpoints are cheap (limit=200), so there's no real cost
+  // to always keeping both counts current.
+  const loadAll = useCallback(async () => {
+    await Promise.all([loadProblems(), loadDetections()]);
+  }, [loadProblems, loadDetections]);
 
-  const { lastUpdated, refreshing, refresh } = useAutoRefresh(loadActiveTab);
+  const { lastUpdated, refreshing, refresh } = useAutoRefresh(loadAll);
 
   // Re-fetch immediately when switching tabs or toggling history, rather
   // than waiting for the next 60s auto-refresh tick.

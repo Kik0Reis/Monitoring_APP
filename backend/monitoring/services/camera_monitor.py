@@ -363,31 +363,6 @@ def update_camera_component_health(
     return updated
 
 
-def create_camera_alert(
-    camera: Camera,
-    alert_type: str,
-    message: str,
-    payload: dict[str, Any],
-    severity: str = AlertSeverity.WARNING,
-) -> CameraAlert:
-    """Raise a camera alert of the given type, reusing the active one if there is one."""
-
-    existing_alert = CameraAlert.objects.filter(
-        camera=camera, alert_type=alert_type, active=True
-    ).first()
-
-    if existing_alert:
-        return existing_alert
-
-    return CameraAlert.objects.create(
-        camera=camera,
-        alert_type=alert_type,
-        severity=severity,
-        message=message,
-        raw_payload=payload,
-    )
-
-
 @transaction.atomic
 def process_camera_detection(
     camera: Camera, payload: dict[str, Any], received_at=None
@@ -396,6 +371,14 @@ def process_camera_detection(
 
     Marks the camera online (it just sent us something) and logs a
     CAMERA_ALERT with what was detected.
+
+    Unlike CAMERA_OFFLINE/CAMERA_ERROR (see create_camera_offline_alert),
+    this always creates a NEW row instead of reusing an active one --
+    detections are a chronological log of distinct events (each smoke/
+    person/etc event matters on its own), not a "currently broken" state
+    with one row to keep updating. Retention is time-based instead (see
+    settings.DETECTION_RETENTION_DAYS and
+    monitoring.services.retention.delete_old_detections).
     """
 
     if received_at is None:
@@ -416,10 +399,10 @@ def process_camera_detection(
 
     message += ")."
 
-    return create_camera_alert(
+    return CameraAlert.objects.create(
         camera=camera,
         alert_type=CameraAlertType.CAMERA_ALERT,
-        message=message,
-        payload=payload,
         severity=AlertSeverity.WARNING,
+        message=message,
+        raw_payload=payload,
     )

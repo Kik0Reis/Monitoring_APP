@@ -314,7 +314,13 @@ def process_device_info(device: Device, payload: dict[str, Any], received_at=Non
 def create_device_issue_alert(
     device: Device, issue_name: str, payload: dict[str, Any]
 ) -> DeviceAlert:
-    """Raise a DEVICE_ERROR alert for a named issue, reusing the active alert for it if one exists."""
+    """Raise a DEVICE_ERROR alert for a named issue, reusing the active alert for it if one exists.
+
+    Bumps last_seen_at on reuse -- this is how resolve_stale_alerts()
+    (monitoring/services/retention.py) later knows the issue is still
+    being reported, vs. having simply stopped without an explicit
+    "resolved" message.
+    """
 
     existing_alerts = DeviceAlert.objects.filter(
         device=device, alert_type=AlertType.DEVICE_ERROR, active=True
@@ -322,6 +328,8 @@ def create_device_issue_alert(
 
     for alert in existing_alerts:
         if alert.raw_payload.get("issue_name") == issue_name:
+            alert.last_seen_at = timezone.now()
+            alert.save(update_fields=["last_seen_at"])
             return alert
 
     message = (
