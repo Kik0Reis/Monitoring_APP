@@ -1,7 +1,8 @@
 import { useCallback, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { X } from "lucide-react";
 
-import { camerasApi } from "../../services/api";
+import { alertsApi, camerasApi } from "../../services/api";
 import { useCrudResource } from "../../hooks/useCrudResource";
 import { useAutoRefresh } from "../../hooks/useAutoRefresh";
 
@@ -11,6 +12,7 @@ import FormField from "../../components/common/FormField";
 import StatusBadge from "../../components/common/StatusBadge";
 import PendingReviewBadge from "../../components/common/PendingReviewBadge";
 import NotOnMqttBadge from "../../components/common/NotOnMqttBadge";
+import CollapsibleSection from "../../components/common/CollapsibleSection";
 import { formatTimestamp } from "../../utils/formatTimestamp";
 
 import CrudModal from "../../components/crud/CrudModal";
@@ -21,6 +23,30 @@ const FORM_FIELDS = [
   { name: "channel", label: "Channel", type: "text" },
   { name: "active", label: "Active", type: "checkbox" },
 ];
+
+/** One row inside an Offline/Errors/Detections section, with a resolve button. */
+function AlertRow({ alert, onResolve, label = "Active" }) {
+  return (
+    <div className="entity-alert-row active">
+      <div className="entity-alert-main">
+        <StatusBadge status="warning" label={label} />
+        <span>{alert.message}</span>
+      </div>
+
+      <div className="entity-alert-row-end">
+        <time>{formatTimestamp(alert.created_at)}</time>
+        <button
+          type="button"
+          className="alert-row-resolve"
+          title="Mark as resolved"
+          onClick={() => onResolve(alert)}
+        >
+          <X size={14} />
+        </button>
+      </div>
+    </div>
+  );
+}
 
 function CameraDetail() {
   const { cameraId } = useParams();
@@ -39,6 +65,15 @@ function CameraDetail() {
   }, [cameraId]);
 
   const { lastUpdated, refreshing, refresh } = useAutoRefresh(loadCamera);
+
+  async function handleResolveAlert(alert) {
+    try {
+      await alertsApi.resolveCamera(alert.id);
+      await loadCamera();
+    } catch {
+      // Best-effort; the row just stays visible if this fails.
+    }
+  }
 
   const resource = useCrudResource({
     api: camerasApi,
@@ -80,6 +115,14 @@ function CameraDetail() {
       </div>
     );
   }
+
+  // "alerts" is CAMERA_ERROR/CAMERA_OFFLINE only (see cameras/serializers.py);
+  // real detections (CAMERA_ALERT) come back separately in "detections".
+  const allAlerts = camera?.alerts ?? [];
+  const activeAlerts = allAlerts.filter((alert) => alert.active);
+  const offlineAlerts = activeAlerts.filter((alert) => alert.category === "offline");
+  const errorAlerts = activeAlerts.filter((alert) => alert.category === "error");
+  const detections = (camera?.detections ?? []).filter((alert) => alert.active);
 
   return (
     <div className="page">
@@ -177,12 +220,43 @@ function CameraDetail() {
         </div>
       )}
 
-      {camera && camera.license_data && Object.keys(camera.license_data).length > 0 && (
-        <section className="detail-section">
-          <div className="detail-section-header">
-            <h3>License</h3>
+      {offlineAlerts.length > 0 && (
+        <CollapsibleSection title="Offline" count={offlineAlerts.length} defaultOpen>
+          <div className="entity-alerts-list">
+            {offlineAlerts.map((alert) => (
+              <AlertRow key={alert.id} alert={alert} onResolve={handleResolveAlert} />
+            ))}
           </div>
+        </CollapsibleSection>
+      )}
 
+      {errorAlerts.length > 0 && (
+        <CollapsibleSection title="Errors" count={errorAlerts.length} defaultOpen>
+          <div className="entity-alerts-list">
+            {errorAlerts.map((alert) => (
+              <AlertRow key={alert.id} alert={alert} onResolve={handleResolveAlert} />
+            ))}
+          </div>
+        </CollapsibleSection>
+      )}
+
+      {detections.length > 0 && (
+        <CollapsibleSection title="Detections" count={detections.length}>
+          <div className="entity-alerts-list">
+            {detections.map((alert) => (
+              <AlertRow
+                key={alert.id}
+                alert={alert}
+                onResolve={handleResolveAlert}
+                label="Detected"
+              />
+            ))}
+          </div>
+        </CollapsibleSection>
+      )}
+
+      {camera && camera.license_data && Object.keys(camera.license_data).length > 0 && (
+        <CollapsibleSection title="License">
           <div className="component-detail-list">
             <div className="component-detail-row">
               <span>Licensed</span>
@@ -239,29 +313,7 @@ function CameraDetail() {
               </div>
             )}
           </div>
-        </section>
-      )}
-
-      {camera && camera.alerts && camera.alerts.some((alert) => alert.active) && (
-        <section className="detail-section">
-          <div className="detail-section-header">
-            <h3>Alerts</h3>
-          </div>
-
-          <div className="entity-alerts-list">
-            {camera.alerts
-              .filter((alert) => alert.active)
-              .map((alert) => (
-                <div className="entity-alert-row active" key={alert.id}>
-                  <div className="entity-alert-main">
-                    <StatusBadge status="warning" label="Active" />
-                    <span>{alert.message}</span>
-                  </div>
-                  <time>{formatTimestamp(alert.created_at)}</time>
-                </div>
-              ))}
-          </div>
-        </section>
+        </CollapsibleSection>
       )}
 
       {resource.modalMode && (

@@ -43,7 +43,13 @@ def update_camera_status(camera: Camera, new_status: str, received_at=None) -> C
 
 
 def create_camera_offline_alert(camera: Camera) -> CameraAlert:
-    """Raise a CAMERA_OFFLINE alert, reusing the active one if there is one."""
+    """Raise a CAMERA_OFFLINE alert, reusing the active one if there is one.
+
+    See device_health.create_offline_alert -- same "manual resolve
+    actually sticks" behavior: if the most recent CAMERA_OFFLINE alert
+    was manually resolved and the camera hasn't come back online since,
+    this keeps it resolved instead of instantly re-raising it.
+    """
 
     existing_alert = CameraAlert.objects.filter(
         camera=camera, alert_type=CameraAlertType.CAMERA_OFFLINE, active=True
@@ -51,6 +57,17 @@ def create_camera_offline_alert(camera: Camera) -> CameraAlert:
 
     if existing_alert:
         return existing_alert
+
+    last_alert = (
+        CameraAlert.objects.filter(camera=camera, alert_type=CameraAlertType.CAMERA_OFFLINE)
+        .order_by("-created_at")
+        .first()
+    )
+
+    if last_alert and last_alert.manually_resolved_at:
+        last_alert.last_seen_at = timezone.now()
+        last_alert.save(update_fields=["last_seen_at"])
+        return last_alert
 
     return CameraAlert.objects.create(
         camera=camera,
@@ -61,7 +78,17 @@ def create_camera_offline_alert(camera: Camera) -> CameraAlert:
 
 
 def resolve_camera_offline_alerts(camera: Camera) -> int:
-    """Close any active CAMERA_OFFLINE alert for this camera."""
+    """Close any active CAMERA_OFFLINE alert for this camera.
+
+    Also clears manually_resolved_at, same reasoning as
+    device_health.resolve_offline_alerts.
+    """
+
+    CameraAlert.objects.filter(
+        camera=camera,
+        alert_type=CameraAlertType.CAMERA_OFFLINE,
+        manually_resolved_at__isnull=False,
+    ).update(manually_resolved_at=None)
 
     return CameraAlert.objects.filter(
         camera=camera, alert_type=CameraAlertType.CAMERA_OFFLINE, active=True

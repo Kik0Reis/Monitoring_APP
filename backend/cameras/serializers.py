@@ -20,8 +20,15 @@ class CameraSerializer(serializers.ModelSerializer):
     # navigation (Country -> Customer -> Location -> Device -> Camera).
     breadcrumb = serializers.SerializerMethodField()
 
-    # Recent alerts (active and resolved) for this camera, newest first.
+    # Recent alerts (active and resolved) for this camera, newest first --
+    # CAMERA_ERROR/CAMERA_OFFLINE only. Real detections (CAMERA_ALERT) are
+    # a different thing and live in their own "detections" field below.
     alerts = serializers.SerializerMethodField()
+
+    # Real-world detections (CAMERA_ALERT) reported by this camera,
+    # newest first. Kept separate from "alerts" since these aren't
+    # problems -- they're events (smoke, person, etc).
+    detections = serializers.SerializerMethodField()
 
     class Meta:
         model = Camera
@@ -50,6 +57,7 @@ class CameraSerializer(serializers.ModelSerializer):
             "active",
             "breadcrumb",
             "alerts",
+            "detections",
             "pending_review",
             "created_at",
             "updated_at",
@@ -68,6 +76,7 @@ class CameraSerializer(serializers.ModelSerializer):
             "health_data",
             "license_data",
             "alerts",
+            "detections",
 
             "pending_review",
             "created_at",
@@ -113,21 +122,36 @@ class CameraSerializer(serializers.ModelSerializer):
             },
         ]
 
+    def _serialize_alert(self, alert):
+        return {
+            "id": alert.id,
+            "alert_type": alert.alert_type,
+            "category": "offline" if alert.alert_type == "CAMERA_OFFLINE" else "error",
+            "severity": alert.severity,
+            "message": alert.message,
+            "active": alert.active,
+            "created_at": alert.created_at,
+            "resolved_at": alert.resolved_at,
+        }
+
     def get_alerts(self, obj):
-        # CameraAlert.Meta.ordering is already "-created_at", and the
-        # view prefetches "alerts" so this doesn't add an extra query.
+        # CameraAlert.Meta.ordering is already "-created_at", and the view
+        # prefetches "alerts" so this doesn't add an extra query. Excludes
+        # CAMERA_ALERT (real detections) -- see get_detections below.
         return [
-            {
-                "id": alert.id,
-                "alert_type": alert.alert_type,
-                "severity": alert.severity,
-                "message": alert.message,
-                "active": alert.active,
-                "created_at": alert.created_at,
-                "resolved_at": alert.resolved_at,
-            }
-            for alert in list(obj.alerts.all())[:30]
-        ]
+            self._serialize_alert(alert)
+            for alert in list(obj.alerts.all())
+            if alert.alert_type != "CAMERA_ALERT"
+        ][:30]
+
+    def get_detections(self, obj):
+        # Real-world events (CAMERA_ALERT), most recent first, capped the
+        # same way as the "alerts" field above.
+        return [
+            self._serialize_alert(alert)
+            for alert in list(obj.alerts.all())
+            if alert.alert_type == "CAMERA_ALERT"
+        ][:30]
 
     def validate_name(self, value):
         value = value.strip()

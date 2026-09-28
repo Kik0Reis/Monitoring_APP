@@ -148,10 +148,25 @@ class DeviceSerializer(serializers.ModelSerializer):
     def get_alerts(self, obj):
         # DeviceAlert.Meta.ordering is already "-created_at", and the
         # view prefetches "alerts" so this doesn't add an extra query.
+        #
+        # "category" lets the frontend show these as separate sections:
+        #   - "offline": DEVICE_OFFLINE (device currently unreachable).
+        #   - "health":  DEVICE_HEALTH (component healthcheck failing).
+        #   - "error":   DEVICE_ERROR/MQTT_ERROR/SYSTEM_ERROR -- a
+        #     free-form message actually sent over MQTT (e.g. "low
+        #     threshold"), not a status.
+        def category(alert_type):
+            if alert_type == "DEVICE_OFFLINE":
+                return "offline"
+            if alert_type == "DEVICE_HEALTH":
+                return "health"
+            return "error"
+
         return [
             {
                 "id": alert.id,
                 "alert_type": alert.alert_type,
+                "category": category(alert.alert_type),
                 "severity": alert.severity,
                 "message": alert.message,
                 "active": alert.active,

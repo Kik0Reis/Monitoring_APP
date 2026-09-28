@@ -1,7 +1,8 @@
 import { useCallback, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { X } from "lucide-react";
 
-import { dashboardApi } from "../../services/api";
+import { alertsApi, dashboardApi } from "../../services/api";
 import { useAutoRefresh } from "../../hooks/useAutoRefresh";
 
 import PageHeader from "../../components/common/PageHeader";
@@ -38,6 +39,69 @@ function severityDot(severity) {
   return "info";
 }
 
+/**
+ * One dashboard panel of alert-like rows (offline / health / errors /
+ * detections). Each row navigates to the device/camera on click, and has
+ * its own small "resolve" button that marks it resolved without leaving
+ * the dashboard -- if the same problem gets reported again over MQTT it
+ * simply comes back as a fresh alert.
+ */
+function AlertPanel({ eyebrow, title, items, emptyText, onOpen, onResolve, showDot = true }) {
+  return (
+    <article className="dashboard-panel">
+      <div className="panel-header">
+        <div>
+          <p className="panel-eyebrow">{eyebrow}</p>
+          <h2>{title}</h2>
+        </div>
+      </div>
+
+      <div className="alert-list">
+        {items.length === 0 ? (
+          <div className="dashboard-empty">{emptyText}</div>
+        ) : (
+          items.map((item) => (
+            <div className="alert-row" key={item.id} onClick={() => onOpen(item)}>
+              <div className="alert-row-main">
+                {showDot && <StatusDot status={severityDot(item.severity)} />}
+                <div>
+                  <strong>{item.message ?? (item.camera_name ?? item.device_name)}</strong>
+                  <span>
+                    {item.message
+                      ? `${item.camera_name ?? item.device_name}${
+                          item.location_name ? ` · ${item.location_name}` : ""
+                        }`
+                      : item.location_name ?? "—"}
+                  </span>
+                </div>
+              </div>
+
+              <div className="alert-row-side">
+                <div className="alert-row-meta">
+                  <span>{formatAlertType(item.alert_type ?? item.type)}</span>
+                  <time>{formatTime(item.created_at)}</time>
+                </div>
+
+                <button
+                  type="button"
+                  className="alert-row-resolve"
+                  title="Mark as resolved"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onResolve(item);
+                  }}
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </article>
+  );
+}
+
 function Dashboard() {
   const navigate = useNavigate();
 
@@ -62,6 +126,15 @@ function Dashboard() {
       navigate(`/cameras/${alert.camera_id}`);
     } else if (alert.device_id) {
       navigate(`/devices/${alert.device_id}`);
+    }
+  }
+
+  async function handleResolve(alert) {
+    try {
+      await alertsApi.resolveById(alert.id);
+      await refresh();
+    } catch (err) {
+      setError(err.message || "Failed to resolve alert.");
     }
   }
 
@@ -96,7 +169,8 @@ function Dashboard() {
   }
 
   const summary = dashboard?.summary ?? {};
-  const recentProblems = dashboard?.recent_problems ?? [];
+  const offlineAlerts = dashboard?.recent_offline_alerts ?? [];
+  const errorAlerts = dashboard?.recent_error_alerts ?? [];
   const devicesWithProblems = dashboard?.devices_with_problems ?? [];
   const locationsWithProblems = dashboard?.locations_with_problems ?? [];
   const recentDetections = dashboard?.recent_detections ?? [];
@@ -116,7 +190,11 @@ function Dashboard() {
         lastUpdated={lastUpdated}
         refreshing={refreshing}
         onRefresh={refresh}
-      />
+      >
+        <button type="button" className="text-button" onClick={() => navigate("/alerts")}>
+          See All
+        </button>
+      </PageHeader>
 
       {error && <div className="error-message">{error}</div>}
 
@@ -131,45 +209,43 @@ function Dashboard() {
       </section>
 
       <section className="dashboard-grid">
-        <article className="dashboard-panel">
-          <div className="panel-header">
-            <div>
-              <p className="panel-eyebrow">Monitoring</p>
-              <h2>Recent Problems</h2>
-            </div>
-            <button type="button" className="text-button" onClick={() => navigate("/alerts")}>
-              See All
-            </button>
-          </div>
+        {/* Devices/cameras currently unreachable — stays visible for as
+            long as it's genuinely still offline. */}
+        <AlertPanel
+          eyebrow="Connectivity"
+          title="Offline"
+          items={offlineAlerts}
+          emptyText="Nothing offline."
+          onOpen={handleAlertClick}
+          onResolve={handleResolve}
+        />
 
-          <div className="alert-list">
-            {recentProblems.length === 0 ? (
-              <div className="dashboard-empty">No active problems.</div>
-            ) : (
-              recentProblems.map((alert) => (
-                <button
-                  type="button"
-                  className="alert-row"
-                  key={alert.id}
-                  onClick={() => handleAlertClick(alert)}
-                >
-                  <div className="alert-row-main">
-                    <StatusDot status={severityDot(alert.severity)} />
-                    <div>
-                      <strong>{alert.camera_name ?? alert.device_name}</strong>
-                      <span>{alert.location_name ?? "—"}</span>
-                    </div>
-                  </div>
+        {/* Component healthchecks (detectorapi/detector/idmr...) already
+            drive the device's own status badge/color -- no separate
+            section for them here, that would just duplicate it. */}
 
-                  <div className="alert-row-meta">
-                    <span>{formatAlertType(alert.alert_type ?? alert.type)}</span>
-                    <time>{formatTime(alert.created_at)}</time>
-                  </div>
-                </button>
-              ))
-            )}
-          </div>
-        </article>
+        {/* Free-form messages actually sent over MQTT (e.g. "low
+            threshold"), separate from offline/health status. Auto-clears
+            after ~1 day even if still being reported. */}
+        <AlertPanel
+          eyebrow="Monitoring"
+          title="Errors"
+          items={errorAlerts}
+          emptyText="No errors reported."
+          onOpen={handleAlertClick}
+          onResolve={handleResolve}
+        />
+
+        {/* real camera events, not "broken" problems -- plain feed, no severity dot */}
+        <AlertPanel
+          eyebrow="Cameras"
+          title="Recent Detections"
+          items={recentDetections}
+          emptyText="No detections yet."
+          onOpen={handleAlertClick}
+          onResolve={handleResolve}
+          showDot={false}
+        />
 
         {/* click through to the device page for full status */}
         <article className="dashboard-panel">
@@ -244,49 +320,6 @@ function Dashboard() {
                   </button>
                 );
               })
-            )}
-          </div>
-        </article>
-
-        {/* real camera events, not "broken" problems -- plain feed, no severity dot */}
-        <article className="dashboard-panel">
-          <div className="panel-header">
-            <div>
-              <p className="panel-eyebrow">Cameras</p>
-              <h2>Recent Detections</h2>
-            </div>
-            <button type="button" className="text-button" onClick={() => navigate("/alerts")}>
-              See All
-            </button>
-          </div>
-
-          <div className="alert-list">
-            {recentDetections.length === 0 ? (
-              <div className="dashboard-empty">No detections yet.</div>
-            ) : (
-              recentDetections.map((detection) => (
-                <button
-                  type="button"
-                  className="alert-row"
-                  key={detection.id}
-                  onClick={() => handleAlertClick(detection)}
-                >
-                  <div className="alert-row-main">
-                    <StatusDot status="info" />
-                    <div>
-                      <strong>{detection.message}</strong>
-                      <span>
-                        {detection.camera_name}
-                        {detection.location_name ? ` · ${detection.location_name}` : ""}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="alert-row-meta">
-                    <time>{formatTime(detection.created_at)}</time>
-                  </div>
-                </button>
-              ))
             )}
           </div>
         </article>

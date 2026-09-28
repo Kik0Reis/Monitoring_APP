@@ -36,7 +36,19 @@ class AppSettingsSerializer(serializers.Serializer):
     # monitoring/services/retention.py:resolve_stale_alerts).
     alert_stale_hours = serializers.IntegerField(min_value=1, max_value=720)
 
+    # How long an "error" alert (a free-form MQTT message, e.g. "low
+    # threshold") stays visible on the dashboard/alerts page before it
+    # hides itself, even if it's still active/being re-reported. Separate
+    # from alert_retention_days, which is when a *resolved* alert is
+    # physically deleted.
+    alert_visible_hours = serializers.IntegerField(min_value=1, max_value=720)
+
     # How many days of camera detections (smoke/person/etc events) to
     # keep and show (see
     # monitoring/services/retention.py:delete_old_detections).
     detection_retention_days = serializers.IntegerField(min_value=1, max_value=3650)
+
+    # How long a detection stays visible on the dashboard/alerts page
+    # before it hides itself -- separate from detection_retention_days,
+    # which is when the row is physically deleted.
+    detection_visible_hours = serializers.IntegerField(min_value=1, max_value=720)

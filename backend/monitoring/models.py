@@ -107,6 +107,17 @@ class DeviceAlert(models.Model):
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
     resolved_at = models.DateTimeField(null=True, blank=True)
 
+    # Set only when a human resolved this from the dashboard/alerts/device
+    # detail UI (as opposed to the monitoring services resolving it
+    # automatically because the underlying problem genuinely cleared).
+    # This is what lets a manual resolve actually "stick": as long as this
+    # is set, the create_*_alert() helpers in device_health.py keep this
+    # same row resolved instead of immediately raising a fresh one for the
+    # same still-ongoing problem, and only clear it once there's a real
+    # "back to normal" signal (see resolve_offline_alerts/
+    # resolve_health_alerts) proving this is a genuinely new occurrence.
+    manually_resolved_at = models.DateTimeField(null=True, blank=True)
+
     # Bumped every time this same alert is re-reported over MQTT (see
     # create_device_issue_alert). DEVICE_OFFLINE/DEVICE_HEALTH resolve
     # immediately on the matching "back to normal" signal, but free-form
@@ -158,6 +169,14 @@ class CameraAlert(models.Model):
     active = models.BooleanField(default=True, db_index=True)
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
     resolved_at = models.DateTimeField(null=True, blank=True)
+
+    # See DeviceAlert.manually_resolved_at -- same "resolve actually
+    # sticks" mechanism, for CAMERA_OFFLINE (and CAMERA_ERROR, once
+    # something creates those). Not used for CAMERA_ALERT (real
+    # detections): once one is manually resolved it's simply gone, there's
+    # no "same occurrence" to keep suppressing since each detection is
+    # already its own row.
+    manually_resolved_at = models.DateTimeField(null=True, blank=True)
 
     # See DeviceAlert.last_seen_at -- same mechanism, kept in step so
     # CAMERA_ERROR behaves the same way if/when a per-camera issue topic

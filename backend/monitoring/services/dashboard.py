@@ -8,7 +8,7 @@ from django.utils import timezone
 from cameras.models import Camera, CameraStatus
 from devices.models import Device, DeviceStatus
 from locations.models import Location
-from monitoring.models import CameraAlert, CameraAlertType, DeviceAlert
+from monitoring.models import AlertType, CameraAlert, CameraAlertType, DeviceAlert
 from monitoring.services.device_health import is_component_healthy
 
 
@@ -26,13 +26,56 @@ def get_dashboard_summary():
     }
 
 
-def get_problem_alerts(limit=10, active_only=True):
+# DEVICE_OFFLINE/CAMERA_OFFLINE describe a device/camera that's currently
+# unreachable -- a real, ongoing state, so they stay visible for as long as
+# they're active, however long that is.
+#
+# DEVICE_HEALTH is the periodic component healthcheck (detectorapi,
+# detector, idmr, ... reporting "down"/unhealthy) -- still a *status*,
+# not a one-off reported problem.
+#
+# Everything else (DEVICE_ERROR, MQTT_ERROR, SYSTEM_ERROR, CAMERA_ERROR) is
+# a free-form message the Edge/camera actually sent over MQTT (e.g. "low
+# threshold", a licensing problem, a crash) -- these are what the frontend
+# splits into their own "Errors" section, separate from both offline and
+# healthcheck alerts.
+_OFFLINE_ALERT_TYPES = {AlertType.DEVICE_OFFLINE, CameraAlertType.CAMERA_OFFLINE}
+_HEALTH_ALERT_TYPES = {AlertType.DEVICE_HEALTH}
+_ERROR_ALERT_TYPES = {
+    AlertType.DEVICE_ERROR,
+    AlertType.MQTT_ERROR,
+    AlertType.SYSTEM_ERROR,
+    CameraAlertType.CAMERA_ERROR,
+}
+
+
+def _alert_category(alert_type):
+    if alert_type in _OFFLINE_ALERT_TYPES:
+        return "offline"
+    if alert_type in _HEALTH_ALERT_TYPES:
+        return "health"
+    return "error"
+
+
+def get_problem_alerts(limit=10, active_only=True, category=None):
     """Device/camera health & connectivity problems, newest first.
 
     DeviceAlert (all types) + CameraAlert of type CAMERA_ERROR/CAMERA_OFFLINE.
     Not CAMERA_ALERT, those are real detections (see get_camera_detections).
     active_only=True naturally dedupes to one row per broken thing, since
     the alert row is reused while it stays broken rather than re-created.
+
+    category, when given, is one of:
+      - "offline": device/camera currently unreachable.
+      - "health":  a component healthcheck (DEVICE_HEALTH) reporting an
+        unhealthy component.
+      - "error":   a free-form message actually sent over MQTT (DEVICE_ERROR,
+        MQTT_ERROR, SYSTEM_ERROR, CAMERA_ERROR) -- e.g. "low threshold".
+
+    "error" alerts also disappear on their own after
+    settings.ALERT_VISIBLE_HOURS, even if still active/being re-reported --
+    "offline"/"health" alerts have no such cutoff, since they represent a
+    real, ongoing state for as long as they stay active.
     """
 
     device_alerts = DeviceAlert.objects.select_related("device", "device__location")
@@ -44,6 +87,37 @@ def get_problem_alerts(limit=10, active_only=True):
     if active_only:
         device_alerts = device_alerts.filter(active=True)
         camera_problem_alerts = camera_problem_alerts.filter(active=True)
+
+    if category == "offline":
+        device_alerts = device_alerts.filter(alert_type=AlertType.DEVICE_OFFLINE)
+        camera_problem_alerts = camera_problem_alerts.filter(
+            alert_type=CameraAlertType.CAMERA_OFFLINE
+        )
+    elif category == "health":
+        device_alerts = device_alerts.filter(alert_type=AlertType.DEVICE_HEALTH)
+        camera_problem_alerts = camera_problem_alerts.none()
+    elif category == "error":
+        device_alerts = device_alerts.filter(
+            alert_type__in=[
+                AlertType.DEVICE_ERROR,
+                AlertType.MQTT_ERROR,
+                AlertType.SYSTEM_ERROR,
+            ]
+        )
+        camera_problem_alerts = camera_problem_alerts.filter(
+            alert_type=CameraAlertType.CAMERA_ERROR
+        )
+
+        # The "hide after N hours" window only applies to the live view;
+        # history (active_only=False) shows everything still stored.
+        if active_only:
+            visible_cutoff = timezone.now() - timezone.timedelta(
+                hours=settings.ALERT_VISIBLE_HOURS
+            )
+            device_alerts = device_alerts.filter(created_at__gte=visible_cutoff)
+            camera_problem_alerts = camera_problem_alerts.filter(
+                created_at__gte=visible_cutoff
+            )
 
     device_alerts = device_alerts.order_by("-created_at")[:limit]
     camera_problem_alerts = camera_problem_alerts.order_by("-created_at")[:limit]
@@ -63,19 +137,24 @@ def get_problem_alerts(limit=10, active_only=True):
 def get_camera_detections(limit=50):
     """Most recent real-world detections (CAMERA_ALERT), newest first.
 
-    Chronological log, not a "currently broken" list -- no active/resolved
-    filtering, every detection shows. Restricted to the last
-    settings.DETECTION_RETENTION_DAYS regardless of `limit`, matching what
-    delete_old_detections() physically keeps (see
-    monitoring/services/retention.py) -- the API never implies detections
-    exist that the cleanup job has already removed.
+    Chronological log, so no active/resolved filtering by default -- except
+    a detection that's been manually marked resolved (active=False, see
+    monitoring.views.CameraAlertResolveView) drops out of this list. If the
+    same detection is re-reported on MQTT it gets a brand new row, so it
+    naturally reappears.
+
+    Restricted to the last settings.DETECTION_VISIBLE_HOURS regardless of
+    `limit`, so detections disappear from the feed on their own after about
+    a day -- separate from settings.DETECTION_RETENTION_DAYS, which is when
+    the row is physically deleted (see
+    monitoring/services/retention.py:delete_old_detections).
     """
 
-    cutoff = timezone.now() - timezone.timedelta(days=settings.DETECTION_RETENTION_DAYS)
+    cutoff = timezone.now() - timezone.timedelta(hours=settings.DETECTION_VISIBLE_HOURS)
 
     camera_alerts = (
         CameraAlert.objects.filter(
-            alert_type=CameraAlertType.CAMERA_ALERT, created_at__gte=cutoff
+            alert_type=CameraAlertType.CAMERA_ALERT, created_at__gte=cutoff, active=True
         )
         .select_related("camera", "camera__device", "camera__device__location")
         .order_by("-created_at")[:limit]
@@ -110,6 +189,7 @@ def _serialize_device_alerts(device_alerts):
                 "id": f"device-{alert.id}",
                 "type": alert_type_labels.get(alert.alert_type, "Device"),
                 "alert_type": alert.alert_type,
+                "category": _alert_category(alert.alert_type),
                 "severity": alert.severity,
                 "device_id": alert.device.id,
                 "device_name": alert.device.name,
@@ -147,6 +227,7 @@ def _serialize_camera_alerts(camera_alerts):
                 "id": f"camera-{alert.id}",
                 "type": alert_type_labels.get(alert.alert_type, "Camera"),
                 "alert_type": alert.alert_type,
+                "category": _alert_category(alert.alert_type),
                 "severity": alert.severity,
                 "device_id": device.id if device else None,
                 "device_name": device.name if device else None,
@@ -384,11 +465,30 @@ def get_locations_with_problems(limit=10):
 
 
 def get_dashboard_data():
-    """Everything the monitoring dashboard needs, in one call."""
+    """Everything the monitoring dashboard needs, in one call.
+
+    recent_problems is kept for backwards compatibility (merged, all
+    categories); the frontend dashboard renders recent_offline_alerts and
+    recent_error_alerts as two separate sections:
+      - offline: device/camera currently unreachable.
+      - error:   free-form MQTT messages (e.g. "low threshold").
+
+    DEVICE_HEALTH alerts (category="health") are deliberately left out of
+    both -- they're what the monitoring services use internally to
+    compute a device's online/offline status (see device_health.py), not
+    a separate user-facing problem. get_problem_alerts(category="health")
+    still works if something else ever needs it.
+    """
 
     return {
         "summary": get_dashboard_summary(),
         "recent_problems": get_problem_alerts(limit=10, active_only=True),
+        "recent_offline_alerts": get_problem_alerts(
+            limit=10, active_only=True, category="offline"
+        ),
+        "recent_error_alerts": get_problem_alerts(
+            limit=10, active_only=True, category="error"
+        ),
         "devices_with_problems": get_devices_with_problems(),
         "locations_with_problems": get_locations_with_problems(),
         "recent_detections": get_camera_detections(limit=10),

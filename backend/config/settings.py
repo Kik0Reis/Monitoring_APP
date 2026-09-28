@@ -77,6 +77,16 @@ ALERT_STALE_HOURS = int(os.getenv("ALERT_STALE_HOURS", "24"))
 # monitoring/services/retention.py:delete_old_detections).
 DETECTION_RETENTION_DAYS = int(os.getenv("DETECTION_RETENTION_DAYS", "10"))
 
+# On top of the physical retention window above, both detections and
+# alerts/errors are only *shown* (dashboard + /api/detections/,
+# /api/problems/ for error-type alerts) for this many hours after they
+# were created/last re-reported, even though the row still exists for
+# DETECTION_RETENTION_DAYS / ALERT_RETENTION_DAYS. This is what makes
+# alerts and detections "disappear after a day" on their own, without
+# waiting for the full retention window or a manual resolve.
+ALERT_VISIBLE_HOURS = int(os.getenv("ALERT_VISIBLE_HOURS", "24"))
+DETECTION_VISIBLE_HOURS = int(os.getenv("DETECTION_VISIBLE_HOURS", "24"))
+
 
 # MQTT presence reconciliation.
 #

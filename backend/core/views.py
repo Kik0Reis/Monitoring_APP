@@ -17,7 +17,9 @@ ENV_KEYS = {
     "heartbeat_cleanup_interval_hours": "HEARTBEAT_CLEANUP_INTERVAL_HOURS",
     "alert_retention_days": "ALERT_RETENTION_DAYS",
     "alert_stale_hours": "ALERT_STALE_HOURS",
+    "alert_visible_hours": "ALERT_VISIBLE_HOURS",
     "detection_retention_days": "DETECTION_RETENTION_DAYS",
+    "detection_visible_hours": "DETECTION_VISIBLE_HOURS",
 }
 
 INT_FIELDS = {
@@ -29,7 +31,9 @@ INT_FIELDS = {
     "heartbeat_cleanup_interval_hours",
     "alert_retention_days",
     "alert_stale_hours",
+    "alert_visible_hours",
     "detection_retention_days",
+    "detection_visible_hours",
 }
 
 BOOL_FIELDS = {"mqtt_tls"}

@@ -144,10 +144,32 @@ export const problemsApi = {
 };
 
 // Real camera detections reported over MQTT (smoke, person, etc). Plain
-// chronological event log, no active/resolved concept.
+// chronological event log; only "active" ones show (see backend), which
+// is what lets a detection be manually resolved/hidden below.
 export const detectionsApi = {
   list(params = "") {
     return apiRequest(`/detections/${params}`);
+  },
+};
+
+// Manually resolve a DeviceAlert/CameraAlert (offline alert, error, or
+// detection). Reappears as a fresh alert if the same problem is
+// re-reported over MQTT -- this only silences the current occurrence.
+export const alertsApi = {
+  resolveDevice(id) {
+    return apiRequest(`/alerts/device/${id}/resolve/`, { method: "POST" });
+  },
+  resolveCamera(id) {
+    return apiRequest(`/alerts/camera/${id}/resolve/`, { method: "POST" });
+  },
+  // alert.id from dashboard/problems/detections endpoints looks like
+  // "device-42" or "camera-17" -- this resolves either kind from that
+  // combined id without the caller needing to know which model it is.
+  resolveById(compositeId) {
+    const [kind, rawId] = String(compositeId).split("-");
+    if (kind === "device") return this.resolveDevice(rawId);
+    if (kind === "camera") return this.resolveCamera(rawId);
+    return Promise.reject(new Error(`Unknown alert id: ${compositeId}`));
   },
 };
 

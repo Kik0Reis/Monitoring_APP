@@ -8,6 +8,12 @@ import { formatTimestamp } from "../../utils/formatTimestamp";
  * page (device-wide component status) and the Camera detail page (that
  * camera's own slice of each component, see Camera.health_data).
  */
+const HEALTHY_STATUS_VALUES = new Set(["up", "online", "healthy", "true"]);
+
+function componentStatusColor(status) {
+  return HEALTHY_STATUS_VALUES.has(String(status).toLowerCase()) ? "online" : "critical";
+}
+
 function ComponentCard({ name, data }) {
   if (!data || typeof data !== "object") {
     return null;
@@ -29,7 +35,9 @@ function ComponentCard({ name, data }) {
     <div className="component-card">
       <div className="component-card-header">
         <strong>{name.replace(/_/g, " ")}</strong>
-        {status !== undefined && <StatusBadge status={status} />}
+        {status !== undefined && (
+          <StatusBadge status={componentStatusColor(status)} label={String(status)} />
+        )}
       </div>
 
       <div className="component-detail-list">

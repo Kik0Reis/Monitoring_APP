@@ -23,7 +23,9 @@ const EMPTY_FORM = {
   heartbeat_cleanup_interval_hours: "",
   alert_retention_days: "",
   alert_stale_hours: "",
+  alert_visible_hours: "",
   detection_retention_days: "",
+  detection_visible_hours: "",
 };
 
 function Settings() {
@@ -88,7 +90,9 @@ function Settings() {
       heartbeat_cleanup_interval_hours: Number(form.heartbeat_cleanup_interval_hours),
       alert_retention_days: Number(form.alert_retention_days),
       alert_stale_hours: Number(form.alert_stale_hours),
+      alert_visible_hours: Number(form.alert_visible_hours),
       detection_retention_days: Number(form.detection_retention_days),
+      detection_visible_hours: Number(form.detection_visible_hours),
     };
 
     if (!payload.mqtt_password) {
@@ -263,6 +267,18 @@ function Settings() {
                 onChange={handleChange}
                 disabled={saving}
               />
+              <FormField
+                field={{
+                  name: "alert_visible_hours",
+                  label: "Hide error alerts from view after (hours)",
+                  type: "number",
+                  min: 1,
+                  max: 720,
+                }}
+                value={form.alert_visible_hours}
+                onChange={handleChange}
+                disabled={saving}
+              />
             </div>
           </section>
 
@@ -281,6 +297,18 @@ function Settings() {
                   max: 3650,
                 }}
                 value={form.detection_retention_days}
+                onChange={handleChange}
+                disabled={saving}
+              />
+              <FormField
+                field={{
+                  name: "detection_visible_hours",
+                  label: "Hide detections from view after (hours)",
+                  type: "number",
+                  min: 1,
+                  max: 720,
+                }}
+                value={form.detection_visible_hours}
                 onChange={handleChange}
                 disabled={saving}
               />

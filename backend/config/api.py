@@ -6,7 +6,13 @@ from countries.views import CountryViewSet
 from customers.views import CustomerViewSet
 from devices.views import DeviceViewSet
 from locations.views import LocationViewSet
-from monitoring.views import DashboardView, DetectionsView, ProblemsView
+from monitoring.views import (
+    CameraAlertResolveView,
+    DashboardView,
+    DetectionsView,
+    DeviceAlertResolveView,
+    ProblemsView,
+)
 
 router = DefaultRouter()
 
@@ -27,6 +33,19 @@ urlpatterns = [
     path("problems/", ProblemsView.as_view(), name="problems"),
     # Real camera detections reported over MQTT (smoke, person, etc.).
     path("detections/", DetectionsView.as_view(), name="detections"),
+    # Manually mark a DeviceAlert/CameraAlert as resolved (dashboard,
+    # alerts page, device/camera detail pages). Reappears as a fresh
+    # active alert if the same problem is re-reported on MQTT.
+    path(
+        "alerts/device/<int:alert_id>/resolve/",
+        DeviceAlertResolveView.as_view(),
+        name="device-alert-resolve",
+    ),
+    path(
+        "alerts/camera/<int:alert_id>/resolve/",
+        CameraAlertResolveView.as_view(),
+        name="camera-alert-resolve",
+    ),
     # Reads/writes backend/.env directly (see core/env_settings.py).
     path("settings/", SettingsView.as_view(), name="app-settings"),
 ]

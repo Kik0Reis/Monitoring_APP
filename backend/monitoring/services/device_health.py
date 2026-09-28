@@ -8,6 +8,7 @@ or "down" -- those must never leak into Device.status.
 import logging
 from typing import Any
 
+from django.conf import settings
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
@@ -85,7 +86,18 @@ def record_heartbeat(
 
 
 def create_offline_alert(device: Device) -> DeviceAlert:
-    """Raise a DEVICE_OFFLINE alert, reusing the active one if there is one."""
+    """Raise a DEVICE_OFFLINE alert, reusing the active one if there is one.
+
+    If the most recent DEVICE_OFFLINE alert for this device was manually
+    resolved (see monitoring.views.DeviceAlertResolveView) and the device
+    hasn't actually come back online since, this is still the same
+    ongoing outage -- so instead of raising a brand new active alert
+    (which would make a manual resolve pointless, since the device is
+    still offline on every reconcile pass), this just bumps last_seen_at
+    on the resolved row and leaves it resolved. A real "back online"
+    signal (resolve_offline_alerts) clears manually_resolved_at, so the
+    *next* time it goes offline this raises a fresh alert as normal.
+    """
 
     existing_alert = DeviceAlert.objects.filter(
         device=device, alert_type=AlertType.DEVICE_OFFLINE, active=True
@@ -93,6 +105,17 @@ def create_offline_alert(device: Device) -> DeviceAlert:
 
     if existing_alert:
         return existing_alert
+
+    last_alert = (
+        DeviceAlert.objects.filter(device=device, alert_type=AlertType.DEVICE_OFFLINE)
+        .order_by("-created_at")
+        .first()
+    )
+
+    if last_alert and last_alert.manually_resolved_at:
+        last_alert.last_seen_at = timezone.now()
+        last_alert.save(update_fields=["last_seen_at"])
+        return last_alert
 
     return DeviceAlert.objects.create(
         device=device,
@@ -103,7 +126,20 @@ def create_offline_alert(device: Device) -> DeviceAlert:
 
 
 def resolve_offline_alerts(device: Device) -> int:
-    """Close any active DEVICE_OFFLINE alert for this device."""
+    """Close any active DEVICE_OFFLINE alert for this device.
+
+    Also clears manually_resolved_at on every DEVICE_OFFLINE alert for
+    this device: a real "back online" signal proves whatever comes next
+    is a genuinely new outage, not the same one a human already
+    dismissed, so create_offline_alert() should raise a fresh alert next
+    time rather than staying suppressed forever.
+    """
+
+    DeviceAlert.objects.filter(
+        device=device,
+        alert_type=AlertType.DEVICE_OFFLINE,
+        manually_resolved_at__isnull=False,
+    ).update(manually_resolved_at=None)
 
     return DeviceAlert.objects.filter(
         device=device, alert_type=AlertType.DEVICE_OFFLINE, active=True
@@ -320,6 +356,16 @@ def create_device_issue_alert(
     (monitoring/services/retention.py) later knows the issue is still
     being reported, vs. having simply stopped without an explicit
     "resolved" message.
+
+    If the most recent alert for this exact issue_name was manually
+    resolved (see monitoring.views.DeviceAlertResolveView) and it's still
+    within settings.ALERT_STALE_HOURS of last being reported, this is
+    still the same occurrence -- same reasoning as create_offline_alert,
+    a manual resolve would otherwise be undone by the very next MQTT
+    message repeating the same issue. There's no explicit "issue cleared"
+    signal for DEVICE_ERROR (unlike offline/health), so a gap longer than
+    ALERT_STALE_HOURS between reports is what counts as "this stopped and
+    came back", raising a fresh alert instead.
     """
 
     existing_alerts = DeviceAlert.objects.filter(
@@ -331,6 +377,25 @@ def create_device_issue_alert(
             alert.last_seen_at = timezone.now()
             alert.save(update_fields=["last_seen_at"])
             return alert
+
+    stale_cutoff = timezone.now() - timezone.timedelta(hours=settings.ALERT_STALE_HOURS)
+
+    recent_resolved_alerts = DeviceAlert.objects.filter(
+        device=device,
+        alert_type=AlertType.DEVICE_ERROR,
+        manually_resolved_at__isnull=False,
+    ).order_by("-created_at")[:20]
+
+    for alert in recent_resolved_alerts:
+        if alert.raw_payload.get("issue_name") != issue_name:
+            continue
+
+        if alert.last_seen_at >= stale_cutoff:
+            alert.last_seen_at = timezone.now()
+            alert.save(update_fields=["last_seen_at"])
+            return alert
+
+        break
 
     message = (
         payload.get("message")

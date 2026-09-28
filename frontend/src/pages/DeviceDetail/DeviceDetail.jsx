@@ -1,8 +1,8 @@
 import { useCallback, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Check, Pencil, Trash2 } from "lucide-react";
+import { Check, Pencil, Trash2, X } from "lucide-react";
 
-import { devicesApi, camerasApi } from "../../services/api";
+import { alertsApi, devicesApi, camerasApi } from "../../services/api";
 import { useCrudResource } from "../../hooks/useCrudResource";
 import { useAutoRefresh } from "../../hooks/useAutoRefresh";
 
@@ -14,6 +14,7 @@ import StatusBadge from "../../components/common/StatusBadge";
 import PendingReviewBadge from "../../components/common/PendingReviewBadge";
 import NotOnMqttBadge from "../../components/common/NotOnMqttBadge";
 import ComponentCard from "../../components/common/ComponentCard";
+import CollapsibleSection from "../../components/common/CollapsibleSection";
 import { formatTimestamp } from "../../utils/formatTimestamp";
 
 import CrudModal from "../../components/crud/CrudModal";
@@ -34,6 +35,34 @@ function metricSuffix(key) {
   return key === "temperature" ? "°C" : "%";
 }
 
+/**
+ * One row inside an Offline/Errors section, with a resolve button.
+ * Only active alerts show a resolve button -- resolved ones are just kept
+ * out of the list entirely (see the filters in the sections below).
+ */
+function AlertRow({ alert, onResolve }) {
+  return (
+    <div className="entity-alert-row active">
+      <div className="entity-alert-main">
+        <StatusBadge status="warning" label="Active" />
+        <span>{alert.message}</span>
+      </div>
+
+      <div className="entity-alert-row-end">
+        <time>{formatTimestamp(alert.created_at)}</time>
+        <button
+          type="button"
+          className="alert-row-resolve"
+          title="Mark as resolved"
+          onClick={() => onResolve(alert)}
+        >
+          <X size={14} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function DeviceDetail() {
   const { deviceId } = useParams();
   const navigate = useNavigate();
@@ -51,6 +80,15 @@ function DeviceDetail() {
   }, [deviceId]);
 
   const { lastUpdated, refreshing, refresh } = useAutoRefresh(loadDevice);
+
+  async function handleResolveAlert(alert) {
+    try {
+      await alertsApi.resolveDevice(alert.id);
+      await loadDevice();
+    } catch {
+      // Best-effort; the row just stays visible if this fails.
+    }
+  }
 
   const cameras = useCrudResource({
     api: camerasApi,
@@ -131,6 +169,23 @@ function DeviceDetail() {
   const heartbeatMetrics = heartbeat
     ? METRIC_KEYS.filter((key) => heartbeat[key] !== null && heartbeat[key] !== undefined)
     : [];
+
+  // Same alert list, split by category (see monitoring/services/dashboard.py):
+  // "offline" = unreachable right now, "error" = a free-form MQTT message
+  // (e.g. "low threshold"). DEVICE_HEALTH ("health") is deliberately not
+  // shown here -- it's what already drives the device's own status badge/
+  // component cards above, a separate section would just duplicate it.
+  const allAlerts = device?.alerts ?? [];
+  const activeAlerts = allAlerts.filter((alert) => alert.active);
+  const offlineAlerts = activeAlerts.filter((alert) => alert.category === "offline");
+  const errorAlerts = activeAlerts.filter((alert) => alert.category === "error");
+
+  const systemInfoEntries =
+    device?.system_info && typeof device.system_info === "object"
+      ? Object.entries(device.system_info).filter(
+          ([, value]) => value === null || typeof value !== "object"
+        )
+      : [];
 
   return (
     <div className="page">
@@ -219,37 +274,31 @@ function DeviceDetail() {
         </div>
       )}
 
-      {device && device.alerts && device.alerts.some((alert) => alert.active) && (
-        <section className="detail-section">
-          <div className="detail-section-header">
-            <h3>Alerts</h3>
-          </div>
-
+      {offlineAlerts.length > 0 && (
+        <CollapsibleSection title="Offline" count={offlineAlerts.length} defaultOpen>
           <div className="entity-alerts-list">
-            {device.alerts
-              .filter((alert) => alert.active)
-              .map((alert) => (
-                <div className="entity-alert-row active" key={alert.id}>
-                  <div className="entity-alert-main">
-                    <StatusBadge status="warning" label="Active" />
-                    <span>{alert.message}</span>
-                  </div>
-                  <time>{formatTimestamp(alert.created_at)}</time>
-                </div>
-              ))}
+            {offlineAlerts.map((alert) => (
+              <AlertRow key={alert.id} alert={alert} onResolve={handleResolveAlert} />
+            ))}
           </div>
-        </section>
+        </CollapsibleSection>
+      )}
+
+      {errorAlerts.length > 0 && (
+        <CollapsibleSection title="Errors" count={errorAlerts.length} defaultOpen>
+          <div className="entity-alerts-list">
+            {errorAlerts.map((alert) => (
+              <AlertRow key={alert.id} alert={alert} onResolve={handleResolveAlert} />
+            ))}
+          </div>
+        </CollapsibleSection>
       )}
 
       {heartbeat && heartbeatMetrics.length > 0 && (
-        <section className="detail-section">
-          <div className="detail-section-header">
-            <h3>Latest Heartbeat</h3>
-            <span className="entity-subtext">
-              {formatTimestamp(heartbeat.received_at)}
-            </span>
-          </div>
-
+        <CollapsibleSection
+          title="Latest Heartbeat"
+          badge={<span className="entity-subtext">{formatTimestamp(heartbeat.received_at)}</span>}
+        >
           <div className="metric-grid">
             {heartbeatMetrics.map((key) => (
               <div className="metric-card" key={key}>
@@ -261,58 +310,50 @@ function DeviceDetail() {
               </div>
             ))}
           </div>
-        </section>
+        </CollapsibleSection>
       )}
 
       {componentEntries.length > 0 && (
-        <section className="detail-section">
-          <div className="detail-section-header">
-            <h3>Component Status</h3>
-          </div>
-
+        <CollapsibleSection title="Component Status" count={componentEntries.length}>
           <div className="component-grid">
             {componentEntries.map(([name, data]) => (
               <ComponentCard key={name} name={name} data={data} />
             ))}
           </div>
-        </section>
+        </CollapsibleSection>
       )}
 
-      {device?.system_info && Object.keys(device.system_info).length > 0 && (
-        <section className="detail-section">
-          <div className="detail-section-header">
-            <h3>System Info</h3>
-          </div>
-
+      {systemInfoEntries.length > 0 && (
+        <CollapsibleSection title="System Info">
           <div className="component-grid">
             <div className="component-card">
               <div className="component-detail-list">
-                {Object.entries(device.system_info)
-                  .filter(([, value]) => value === null || typeof value !== "object")
-                  .map(([key, value]) => (
-                    <div className="component-detail-row" key={key}>
-                      <span>{key.replace(/_/g, " ")}</span>
-                      <strong>
-                        {value === null || value === undefined || value === ""
-                          ? "—"
-                          : String(value)}
-                      </strong>
-                    </div>
-                  ))}
+                {systemInfoEntries.map(([key, value]) => (
+                  <div className="component-detail-row" key={key}>
+                    <span>{key.replace(/_/g, " ")}</span>
+                    <strong>
+                      {value === null || value === undefined || value === ""
+                        ? "—"
+                        : String(value)}
+                    </strong>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
-        </section>
+        </CollapsibleSection>
       )}
 
-      <section className="detail-section">
-        <div className="detail-section-header">
-          <h3>Cameras on {device?.name}</h3>
+      <CollapsibleSection
+        title={`Cameras on ${device?.name ?? "..."}`}
+        count={cameras.items.length}
+        defaultOpen
+        actions={
           <button className="primary-button" onClick={() => cameras.openCreate()}>
             + Add Camera
           </button>
-        </div>
-
+        }
+      >
         {cameras.error && <div className="error-message">{cameras.error}</div>}
 
         <DataTable
@@ -345,7 +386,7 @@ function DeviceDetail() {
             </>
           )}
         />
-      </section>
+      </CollapsibleSection>
 
       {cameras.modalMode && (
         <CrudModal
