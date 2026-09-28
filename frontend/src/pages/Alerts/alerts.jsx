@@ -28,7 +28,7 @@ const TABS = [
   {
     key: "detections",
     label: "Detections",
-    description: "Real-world events reported by cameras (smoke, person, etc.).",
+    description: "Real-world events reported by cameras.",
   },
 ];
 
