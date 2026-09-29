@@ -1,0 +1,113 @@
+/* ============================================================
+   ListModal: centered popup for a dashboard panel's full list.
+   Same overlay/centering pattern as crud-modal.css, but sized
+   for a scrollable list rather than a form.
+   ============================================================ */
+
+.list-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-6);
+
+  background: rgba(0, 0, 0, 0.6);
+}
+
+.list-modal {
+  width: 100%;
+  max-width: 640px;
+  max-height: min(720px, calc(100vh - 48px));
+
+  display: flex;
+  flex-direction: column;
+
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md), 0 0 40px rgba(99, 56, 246, 0.12);
+
+  overflow: hidden;
+}
+
+.list-modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+
+  padding: var(--space-5) var(--space-6);
+  border-bottom: 1px solid var(--color-border-soft);
+  flex: 0 0 auto;
+}
+
+.list-modal-eyebrow {
+  margin: 0 0 5px;
+  color: var(--color-muted);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-bold);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.list-modal-header h2 {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  color: var(--color-ink);
+  font-size: var(--text-xl);
+  font-weight: var(--weight-bold);
+}
+
+.list-modal-count {
+  min-width: 24px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--color-surface-alt);
+  color: var(--color-ink-soft);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  text-align: center;
+}
+
+.list-modal-close {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-ink-soft);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.list-modal-close:hover {
+  background: var(--color-surface-alt);
+  color: var(--color-ink);
+}
+
+.list-modal-body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+}
+
+.list-modal-footer {
+  flex: 0 0 auto;
+  padding: var(--space-4) var(--space-6);
+  border-top: 1px solid var(--color-border-soft);
+  color: var(--color-muted);
+  font-size: var(--text-sm);
+}
+
+.list-modal-loading,
+.list-modal-empty {
+  padding: var(--space-8) var(--space-6);
+  text-align: center;
+  color: var(--color-muted);
+  font-size: var(--text-md);
+}

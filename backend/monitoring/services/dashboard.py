@@ -16,13 +16,16 @@ def get_dashboard_summary():
     """Return the top-line device/camera counts shown at the top of the dashboard."""
 
     devices = Device.objects.filter(active=True, device_type="EDGE")
+    cameras = Camera.objects.filter(active=True)
 
     return {
         "devices": devices.count(),
         "online": devices.filter(status=DeviceStatus.ONLINE).count(),
         "offline": devices.filter(status=DeviceStatus.OFFLINE).count(),
         "unknown": devices.filter(status=DeviceStatus.UNKNOWN).count(),
-        "cameras": Camera.objects.filter(active=True).count(),
+        "cameras": cameras.count(),
+        "cameras_online": cameras.filter(status=CameraStatus.ONLINE).count(),
+        "cameras_offline": cameras.filter(status=CameraStatus.OFFLINE).count(),
     }
 
 
@@ -57,26 +60,13 @@ def _alert_category(alert_type):
     return "error"
 
 
-def get_problem_alerts(limit=10, active_only=True, category=None):
-    """Device/camera health & connectivity problems, newest first.
+def _problem_querysets(active_only=True, category=None):
+    """The (DeviceAlert, CameraAlert) querysets behind get_problem_alerts().
 
-    DeviceAlert (all types) + CameraAlert of type CAMERA_ERROR/CAMERA_OFFLINE.
-    Not CAMERA_ALERT, those are real detections (see get_camera_detections).
-    active_only=True naturally dedupes to one row per broken thing, since
-    the alert row is reused while it stays broken rather than re-created.
-
-    category, when given, is one of:
-      - "offline": device/camera currently unreachable.
-      - "health":  a component healthcheck (DEVICE_HEALTH) reporting an
-        unhealthy component.
-      - "error":   a free-form message actually sent over MQTT (DEVICE_ERROR,
-        MQTT_ERROR, SYSTEM_ERROR, CAMERA_ERROR) -- e.g. "low threshold".
-
-    "error" alerts also disappear on their own after
-    settings.ALERT_VISIBLE_HOURS, even if still active/being re-reported --
-    "offline"/"health" alerts have no such cutoff, since they represent a
-    real, ongoing state for as long as they stay active.
+    Shared with get_alert_counts() so the dashboard counters can never
+    disagree with the list you get when you open them.
     """
+
 
     device_alerts = DeviceAlert.objects.select_related("device", "device__location")
 
@@ -119,6 +109,31 @@ def get_problem_alerts(limit=10, active_only=True, category=None):
                 created_at__gte=visible_cutoff
             )
 
+    return device_alerts, camera_problem_alerts
+
+
+def get_problem_alerts(limit=10, active_only=True, category=None):
+    """Device/camera health & connectivity problems, newest first.
+
+    DeviceAlert (all types) + CameraAlert of type CAMERA_ERROR/CAMERA_OFFLINE.
+    Not CAMERA_ALERT, those are real detections (see get_camera_detections).
+    active_only=True naturally dedupes to one row per broken thing, since
+    the alert row is reused while it stays broken rather than re-created.
+
+    category, when given, is one of:
+      - "offline": device/camera currently unreachable.
+      - "health":  a component healthcheck (DEVICE_HEALTH) reporting an
+        unhealthy component.
+      - "error":   a free-form message actually sent over MQTT (DEVICE_ERROR,
+        MQTT_ERROR, SYSTEM_ERROR, CAMERA_ERROR) -- e.g. "low threshold".
+
+    "error" alerts also disappear on their own after
+    settings.ALERT_VISIBLE_HOURS, even if still active/being re-reported --
+    "offline"/"health" alerts have no such cutoff, since they represent a
+    real, ongoing state for as long as they stay active.
+    """
+    device_alerts, camera_problem_alerts = _problem_querysets(active_only, category)
+
     device_alerts = device_alerts.order_by("-created_at")[:limit]
     camera_problem_alerts = camera_problem_alerts.order_by("-created_at")[:limit]
 
@@ -132,6 +147,33 @@ def get_problem_alerts(limit=10, active_only=True, category=None):
         alert["created_at"] = alert["created_at"].isoformat()
 
     return alerts
+
+
+def _detections_queryset():
+    cutoff = timezone.now() - timezone.timedelta(hours=settings.DETECTION_VISIBLE_HOURS)
+
+    return CameraAlert.objects.filter(
+        alert_type=CameraAlertType.CAMERA_ALERT, created_at__gte=cutoff, active=True
+    ).select_related("camera", "camera__device", "camera__device__location")
+
+
+def get_alert_counts():
+    """True totals behind the dashboard's clickable counters.
+
+    The dashboard payload itself only carries a short preview of each list,
+    so the counters need their own cheap COUNT queries (same filters as the
+    lists, see _problem_querysets/_detections_queryset).
+    """
+
+    counts = {}
+
+    for category in ("offline", "error"):
+        device_qs, camera_qs = _problem_querysets(active_only=True, category=category)
+        counts[category] = device_qs.count() + camera_qs.count()
+
+    counts["detections"] = _detections_queryset().count()
+
+    return counts
 
 
 def get_camera_detections(limit=50):
@@ -150,15 +192,7 @@ def get_camera_detections(limit=50):
     monitoring/services/retention.py:delete_old_detections).
     """
 
-    cutoff = timezone.now() - timezone.timedelta(hours=settings.DETECTION_VISIBLE_HOURS)
-
-    camera_alerts = (
-        CameraAlert.objects.filter(
-            alert_type=CameraAlertType.CAMERA_ALERT, created_at__gte=cutoff, active=True
-        )
-        .select_related("camera", "camera__device", "camera__device__location")
-        .order_by("-created_at")[:limit]
-    )
+    camera_alerts = _detections_queryset().order_by("-created_at")[:limit]
 
     alerts = _serialize_camera_alerts(camera_alerts)
 
@@ -464,32 +498,51 @@ def get_locations_with_problems(limit=10):
     return result[:limit]
 
 
+# How many rows of each list ride along in the dashboard payload. The
+# dashboard only previews a few of each; "View all" fetches the full list
+# from /api/problems/ and /api/detections/, and the counters come from
+# alert_counts, so this can stay small.
+DASHBOARD_PREVIEW_ROWS = 3
+
+# The devices/locations panels have no separate endpoint, so the "View all"
+# pop-up reads them straight from this payload -- hence the higher cap.
+DASHBOARD_PROBLEM_LIST_LIMIT = 50
+
+
 def get_dashboard_data():
     """Everything the monitoring dashboard needs, in one call.
 
-    recent_problems is kept for backwards compatibility (merged, all
-    categories); the frontend dashboard renders recent_offline_alerts and
-    recent_error_alerts as two separate sections:
+    recent_offline_alerts / recent_error_alerts / recent_detections are only
+    a short preview (DASHBOARD_PREVIEW_ROWS); alert_counts has the real
+    totals for the clickable counters:
       - offline: device/camera currently unreachable.
       - error:   free-form MQTT messages (e.g. "low threshold").
+      - detections: real camera events.
 
-    DEVICE_HEALTH alerts (category="health") are deliberately left out of
-    both -- they're what the monitoring services use internally to
-    compute a device's online/offline status (see device_health.py), not
-    a separate user-facing problem. get_problem_alerts(category="health")
-    still works if something else ever needs it.
+    DEVICE_HEALTH alerts (category="health") are deliberately left out --
+    they're what the monitoring services use internally to compute a
+    device's online/offline status (see device_health.py), not a separate
+    user-facing problem.
+
+    recent_problems is kept for backwards compatibility (merged, all
+    categories).
     """
 
     return {
         "summary": get_dashboard_summary(),
+        "alert_counts": get_alert_counts(),
         "recent_problems": get_problem_alerts(limit=10, active_only=True),
         "recent_offline_alerts": get_problem_alerts(
-            limit=10, active_only=True, category="offline"
+            limit=DASHBOARD_PREVIEW_ROWS, active_only=True, category="offline"
         ),
         "recent_error_alerts": get_problem_alerts(
-            limit=10, active_only=True, category="error"
+            limit=DASHBOARD_PREVIEW_ROWS, active_only=True, category="error"
         ),
-        "devices_with_problems": get_devices_with_problems(),
-        "locations_with_problems": get_locations_with_problems(),
-        "recent_detections": get_camera_detections(limit=10),
+        "devices_with_problems": get_devices_with_problems(
+            limit=DASHBOARD_PROBLEM_LIST_LIMIT
+        ),
+        "locations_with_problems": get_locations_with_problems(
+            limit=DASHBOARD_PROBLEM_LIST_LIMIT
+        ),
+        "recent_detections": get_camera_detections(limit=DASHBOARD_PREVIEW_ROWS),
     }

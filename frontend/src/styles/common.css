@@ -511,7 +511,7 @@
 
 .summary-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(6, 1fr);
   gap: var(--space-4);
   margin-bottom: var(--space-5);
 }
@@ -524,6 +524,19 @@
   border-radius: var(--radius-lg);
   display: flex;
   flex-direction: column;
+}
+
+.summary-card-clickable {
+  width: 100%;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.summary-card-clickable:hover {
+  background: var(--color-surface-alt);
+  border-color: var(--color-brand-strong);
 }
 
 .summary-card-label {
@@ -554,6 +567,15 @@
   gap: var(--space-5);
 }
 
+/* Compact panels are capped at a few preview rows each (see
+   PREVIEW_ROWS in Dashboard.jsx), so they're narrower and shorter than
+   the old full-height panels -- more of the dashboard fits above the
+   fold, and a smaller minmax lets more columns sit side by side. */
+.compact-grid {
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--space-4);
+}
+
 .dashboard-panel {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
@@ -574,6 +596,111 @@
   color: var(--color-ink);
   font-size: var(--text-lg);
   font-weight: var(--weight-semibold);
+}
+
+/* ---- Compact dashboard panels: clickable header + count pill ---- */
+
+.dashboard-panel.compact {
+  display: flex;
+  flex-direction: column;
+  border-left: 3px solid transparent;
+  transition: border-color 0.15s ease;
+}
+
+/* A problem should be obvious at a glance, even in a compact layout --
+   the left edge picks up the same severity color as the count pill. */
+.dashboard-panel.compact.has-critical {
+  border-left-color: var(--color-danger);
+}
+
+.dashboard-panel.compact.has-warning {
+  border-left-color: var(--color-warning);
+}
+
+.dashboard-panel.compact.has-info {
+  border-left-color: var(--color-info);
+}
+
+.panel-header-clickable {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.panel-header-clickable:hover {
+  background: var(--color-surface-alt);
+}
+
+.panel-count-pill {
+  flex: 0 0 auto;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 9px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-surface-alt);
+  color: var(--color-ink-soft);
+  font-size: var(--text-md);
+  font-weight: var(--weight-bold);
+}
+
+.panel-count-pill.ok {
+  background: var(--color-success-bg);
+  color: var(--color-success);
+}
+
+.panel-count-pill.critical {
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+}
+
+.panel-count-pill.warning {
+  background: var(--color-warning-bg);
+  color: var(--color-warning);
+}
+
+.panel-count-pill.info {
+  background: var(--color-info-bg);
+  color: var(--color-info);
+}
+
+.compact-list {
+  max-height: none;
+  overflow: visible;
+}
+
+.compact-list .alert-row,
+.compact-list .installation-row {
+  min-height: 52px;
+  padding: 0 var(--space-4);
+}
+
+.compact-empty {
+  padding: var(--space-4) var(--space-5);
+  text-align: left;
+  font-size: var(--text-sm);
+}
+
+.panel-view-all {
+  width: 100%;
+  padding: var(--space-2) var(--space-5) var(--space-3);
+  border: 0;
+  background: transparent;
+  color: var(--color-brand-strong);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  text-align: left;
+  cursor: pointer;
+}
+
+.panel-view-all:hover {
+  text-decoration: underline;
 }
 
 .alert-list,
@@ -1065,7 +1192,7 @@
 
 @media (max-width: 1200px) {
   .summary-grid {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(3, 1fr);
   }
 
   .dashboard-grid {
@@ -1074,5 +1201,11 @@
 
   .component-grid {
     grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .summary-grid {
+    grid-template-columns: repeat(2, 1fr);
   }
 }

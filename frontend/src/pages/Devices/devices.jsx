@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Check, Eye, Pencil, Trash2 } from "lucide-react";
 
 import { devicesApi, locationsApi, fetchAll } from "../../services/api";
@@ -28,9 +28,15 @@ const EMPTY_FORM = {
 
 function Devices() {
   const navigate = useNavigate();
+  // Lets the dashboard's clickable counters land here pre-filtered, e.g.
+  // /devices?status=OFFLINE -- read once on load, same as a normal filter
+  // pick from here on (the URL isn't kept in sync with later changes).
+  const [searchParams] = useSearchParams();
   const [locations, setLocations] = useState([]);
   const [locationFilter, setLocationFilter] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState(
+    () => searchParams.get("status") ?? ""
+  );
 
   useEffect(() => {
     fetchAll(locationsApi.list).then(setLocations).catch(() => {});
