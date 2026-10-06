@@ -173,6 +173,15 @@ export const alertsApi = {
   },
 };
 
+// Country > Customer > Location > Device > Camera tree for the
+// "Monitor > Views" page (see monitoring/services/tree.py for what each
+// node's system_check/has_alerts/detections_count mean).
+export const monitorApi = {
+  tree() {
+    return apiRequest("/monitor/tree/");
+  },
+};
+
 export const dashboardApi = {
   get() {
     return apiRequest("/dashboard/");

@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
 import AppLayout from "./components/layout/AppLayout";
 import Dashboard from "./pages/Dashboard/Dashboard";
+import MonitorViews from "./pages/MonitorViews/MonitorViews";
 import Countries from "./pages/Countries/countries";
 import Clients from "./pages/Clients/clients";
 import Locations from "./pages/Locations/locations";
@@ -25,6 +26,8 @@ function App() {
         <Route element={<AppLayout />}>
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<Dashboard />} />
+
+          <Route path="/monitor/views" element={<MonitorViews />} />
 
           <Route path="/countries" element={<Countries />} />
           <Route path="/countries/:countryId" element={<CountryDetail />} />

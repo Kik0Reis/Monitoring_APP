@@ -13,6 +13,8 @@ import FormField from "../../components/common/FormField";
 import StatusBadge from "../../components/common/StatusBadge";
 import PendingReviewBadge from "../../components/common/PendingReviewBadge";
 import CrudModal from "../../components/crud/CrudModal";
+import RollupIndicator from "../../components/common/RollupIndicator";
+import { useMonitorRollup } from "../../hooks/useMonitorRollup";
 
 const EMPTY_FORM = { name: "", description: "", active: true };
 
@@ -33,6 +35,7 @@ function CustomerDetail() {
   }, [customerId]);
 
   const { lastUpdated, refreshing, refresh } = useAutoRefresh(loadCustomer);
+  const rollup = useMonitorRollup();
 
   const locations = useCrudResource({
     api: locationsApi,
@@ -86,6 +89,11 @@ function CustomerDetail() {
       render: (row) => row.devices_count ?? 0,
     },
     {
+      key: "health",
+      header: "Health",
+      render: (row) => <RollupIndicator node={rollup.get("location", row.id)} />,
+    },
+    {
       key: "active",
       header: "Status",
       render: (row) => <StatusBadge status={row.active ? "active" : "inactive"} />,
@@ -135,6 +143,7 @@ function CustomerDetail() {
                 <h2>{customer.name}</h2>
                 <StatusBadge status={customer.active ? "active" : "inactive"} />
                 {customer.pending_review && <PendingReviewBadge />}
+                <RollupIndicator node={rollup.get("customer", customer.id)} showLabel />
               </div>
 
               <div className="detail-summary-meta">

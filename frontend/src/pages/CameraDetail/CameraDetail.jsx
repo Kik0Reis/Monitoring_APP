@@ -16,6 +16,8 @@ import CollapsibleSection from "../../components/common/CollapsibleSection";
 import { formatTimestamp } from "../../utils/formatTimestamp";
 
 import CrudModal from "../../components/crud/CrudModal";
+import RollupIndicator from "../../components/common/RollupIndicator";
+import { useMonitorRollup } from "../../hooks/useMonitorRollup";
 
 const FORM_FIELDS = [
   { name: "name", label: "Name", type: "text" },
@@ -65,6 +67,7 @@ function CameraDetail() {
   }, [cameraId]);
 
   const { lastUpdated, refreshing, refresh } = useAutoRefresh(loadCamera);
+  const rollup = useMonitorRollup();
 
   async function handleResolveAlert(alert) {
     try {
@@ -171,6 +174,7 @@ function CameraDetail() {
                 <StatusBadge status={camera.status} />
                 {camera.pending_review && <PendingReviewBadge />}
                 {!camera.on_mqtt && <NotOnMqttBadge />}
+                <RollupIndicator node={rollup.get("camera", camera.id)} showLabel />
               </div>
 
               <div className="detail-summary-meta">

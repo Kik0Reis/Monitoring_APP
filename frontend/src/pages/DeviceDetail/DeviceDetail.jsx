@@ -18,6 +18,8 @@ import CollapsibleSection from "../../components/common/CollapsibleSection";
 import { formatTimestamp } from "../../utils/formatTimestamp";
 
 import CrudModal from "../../components/crud/CrudModal";
+import RollupIndicator from "../../components/common/RollupIndicator";
+import { useMonitorRollup } from "../../hooks/useMonitorRollup";
 
 const EMPTY_FORM = { name: "", camera_identifier: "", channel: 1, active: true };
 
@@ -80,6 +82,7 @@ function DeviceDetail() {
   }, [deviceId]);
 
   const { lastUpdated, refreshing, refresh } = useAutoRefresh(loadDevice);
+  const rollup = useMonitorRollup();
 
   async function handleResolveAlert(alert) {
     try {
@@ -146,6 +149,11 @@ function DeviceDetail() {
       key: "status",
       header: "Status",
       render: (row) => <StatusBadge status={row.status} />,
+    },
+    {
+      key: "health",
+      header: "Health",
+      render: (row) => <RollupIndicator node={rollup.get("camera", row.id)} />,
     },
     {
       key: "last_seen",
@@ -227,6 +235,7 @@ function DeviceDetail() {
                 <StatusBadge status={device.status} />
                 {device.pending_review && <PendingReviewBadge />}
                 {!device.on_mqtt && <NotOnMqttBadge />}
+                <RollupIndicator node={rollup.get("device", device.id)} showLabel />
               </div>
 
               <div className="detail-summary-meta">

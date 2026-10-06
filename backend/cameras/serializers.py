@@ -1,8 +1,22 @@
+from django.conf import settings
+from django.utils import timezone
 from rest_framework import serializers
 
 from devices.models import Device
 
 from .models import Camera
+
+# Mirrors monitoring/services/dashboard.py:_stale_error_alert_q /
+# _detections_queryset -- kept as a local copy of the same rule rather
+# than importing the monitoring app here, same reasoning as
+# devices/serializers.py's _ERROR_ALERT_TYPES. If either rule changes,
+# update all three places.
+def _error_alert_visible_cutoff():
+    return timezone.now() - timezone.timedelta(hours=settings.ALERT_VISIBLE_HOURS)
+
+
+def _detection_visible_cutoff():
+    return timezone.now() - timezone.timedelta(hours=settings.DETECTION_VISIBLE_HOURS)
 
 
 class CameraSerializer(serializers.ModelSerializer):
@@ -138,19 +152,40 @@ class CameraSerializer(serializers.ModelSerializer):
         # CameraAlert.Meta.ordering is already "-created_at", and the view
         # prefetches "alerts" so this doesn't add an extra query. Excludes
         # CAMERA_ALERT (real detections) -- see get_detections below.
+        #
+        # A CAMERA_ERROR alert stops counting as current after
+        # settings.ALERT_VISIBLE_HOURS, same as everywhere else it's shown
+        # (dashboard, alerts page, monitor tree) -- otherwise a
+        # stale-but-still-active error would keep showing up here even
+        # after it's disappeared everywhere else.
+        error_cutoff = _error_alert_visible_cutoff()
+
+        def is_visible(alert):
+            if alert.alert_type == "CAMERA_OFFLINE":
+                return True
+            return alert.created_at >= error_cutoff
+
         return [
             self._serialize_alert(alert)
-            for alert in list(obj.alerts.all())
-            if alert.alert_type != "CAMERA_ALERT"
+            for alert in obj.alerts.all()
+            if alert.alert_type != "CAMERA_ALERT" and is_visible(alert)
         ][:30]
 
     def get_detections(self, obj):
-        # Real-world events (CAMERA_ALERT), most recent first, capped the
-        # same way as the "alerts" field above.
+        # Real-world events (CAMERA_ALERT), most recent first. Only
+        # active, still-visible ones -- same active + DETECTION_VISIBLE_HOURS
+        # window as get_camera_detections() in
+        # monitoring/services/dashboard.py, so a resolved or aged-out
+        # detection can't keep showing up here after it's gone from the
+        # dashboard/alerts page.
+        detections_cutoff = _detection_visible_cutoff()
+
         return [
             self._serialize_alert(alert)
-            for alert in list(obj.alerts.all())
+            for alert in obj.alerts.all()
             if alert.alert_type == "CAMERA_ALERT"
+            and alert.active
+            and alert.created_at >= detections_cutoff
         ][:30]
 
     def validate_name(self, value):

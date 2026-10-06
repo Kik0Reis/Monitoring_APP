@@ -60,6 +60,44 @@ def _alert_category(alert_type):
     return "error"
 
 
+def _error_alert_visible_cutoff():
+    return timezone.now() - timezone.timedelta(hours=settings.ALERT_VISIBLE_HOURS)
+
+
+def _stale_error_alert_q(prefix=""):
+    """Q object matching an "error"-category alert (see _alert_category)
+    that's older than settings.ALERT_VISIBLE_HOURS -- stale enough that it
+    should stop counting as a current problem even though active=True is
+    still set (it only flips to active=False when resolved/re-reported,
+    see device_health.py/camera_monitor.py).
+
+    This is the ONE place that rule is expressed. Every place that decides
+    whether an error alert currently counts as "a problem" --
+    get_problem_alerts, get_devices_with_problems,
+    get_locations_with_problems, the Device/Camera detail serializers,
+    and the monitor tree (monitoring/services/tree.py) -- excludes
+    against this same Q, so a stale error can't keep showing up as a
+    problem in some places just because one particular query forgot to
+    apply the cutoff.
+
+    `prefix` lets this reach through a relation with .exclude(), e.g.
+    _stale_error_alert_q("alerts__") or
+    _stale_error_alert_q("devices__cameras__alerts__"). Combine with other
+    filters via `&`/`~` as needed; it says nothing about `active` itself.
+    """
+
+    error_types = [
+        AlertType.DEVICE_ERROR,
+        AlertType.MQTT_ERROR,
+        AlertType.SYSTEM_ERROR,
+        CameraAlertType.CAMERA_ERROR,
+    ]
+
+    return Q(**{f"{prefix}alert_type__in": error_types}) & Q(
+        **{f"{prefix}created_at__lt": _error_alert_visible_cutoff()}
+    )
+
+
 def _problem_querysets(active_only=True, category=None):
     """The (DeviceAlert, CameraAlert) querysets behind get_problem_alerts().
 
@@ -77,6 +115,14 @@ def _problem_querysets(active_only=True, category=None):
     if active_only:
         device_alerts = device_alerts.filter(active=True)
         camera_problem_alerts = camera_problem_alerts.filter(active=True)
+
+        # The "hide after N hours" window only applies to the live view;
+        # history (active_only=False) shows everything still stored.
+        # Applied unconditionally here (not just when category="error")
+        # so every caller gets a consistent view, including the merged
+        # category=None list.
+        device_alerts = device_alerts.exclude(_stale_error_alert_q())
+        camera_problem_alerts = camera_problem_alerts.exclude(_stale_error_alert_q())
 
     if category == "offline":
         device_alerts = device_alerts.filter(alert_type=AlertType.DEVICE_OFFLINE)
@@ -97,17 +143,6 @@ def _problem_querysets(active_only=True, category=None):
         camera_problem_alerts = camera_problem_alerts.filter(
             alert_type=CameraAlertType.CAMERA_ERROR
         )
-
-        # The "hide after N hours" window only applies to the live view;
-        # history (active_only=False) shows everything still stored.
-        if active_only:
-            visible_cutoff = timezone.now() - timezone.timedelta(
-                hours=settings.ALERT_VISIBLE_HOURS
-            )
-            device_alerts = device_alerts.filter(created_at__gte=visible_cutoff)
-            camera_problem_alerts = camera_problem_alerts.filter(
-                created_at__gte=visible_cutoff
-            )
 
     return device_alerts, camera_problem_alerts
 
@@ -312,7 +347,21 @@ def _device_has_component_problem(device):
 
 
 def get_devices_with_problems(limit=10):
-    """Devices needing attention: OFFLINE/UNKNOWN, unhealthy component, or active alert."""
+    """Devices needing attention: OFFLINE/UNKNOWN, unhealthy component, or active error alert.
+
+    "active alert" here specifically means an "error"-category alert
+    (DEVICE_ERROR/MQTT_ERROR/SYSTEM_ERROR, see _alert_category) -- not
+    DEVICE_OFFLINE (already covered by the status check above, so
+    counting it again here would both double-count it and print a
+    redundant "Offline" issue alongside "Device offline") and not
+    DEVICE_HEALTH (already reflected via unhealthy_components above).
+    """
+
+    error_alert_types = [
+        AlertType.DEVICE_ERROR,
+        AlertType.MQTT_ERROR,
+        AlertType.SYSTEM_ERROR,
+    ]
 
     devices = (
         Device.objects.filter(active=True, device_type="EDGE")
@@ -320,13 +369,18 @@ def get_devices_with_problems(limit=10):
         .prefetch_related(
             Prefetch(
                 "alerts",
-                queryset=DeviceAlert.objects.filter(active=True),
+                queryset=DeviceAlert.objects.filter(
+                    active=True, alert_type__in=error_alert_types
+                ).exclude(_stale_error_alert_q()),
                 to_attr="active_alerts_prefetched",
             )
         )
         .annotate(
             active_alert_count=Count(
-                "alerts", filter=Q(alerts__active=True), distinct=True
+                "alerts",
+                filter=Q(alerts__active=True, alerts__alert_type__in=error_alert_types)
+                & ~_stale_error_alert_q("alerts__"),
+                distinct=True,
             )
         )
     )
@@ -388,11 +442,32 @@ def get_devices_with_problems(limit=10):
 
 
 def get_locations_with_problems(limit=10):
-    """Locations with an offline/unknown device or camera, or an active alert.
+    """Locations with an offline/unknown device or camera, or an active error alert.
 
     Each result gets a short "issues" list (e.g. "2 device(s) offline")
     instead of just a raw count.
+
+    active_device_alerts/active_camera_alerts count only "error"-category
+    alerts (DEVICE_ERROR/MQTT_ERROR/SYSTEM_ERROR, CAMERA_ERROR -- see
+    _alert_category), the same definition used everywhere else (dashboard
+    Errors panel, monitor tree, alerts page). In particular this means:
+      - DEVICE_OFFLINE/CAMERA_OFFLINE alerts are excluded -- offline_devices/
+        offline_cameras (based on the device/camera's own status) already
+        cover that, counting the alert too would double it up.
+      - CAMERA_ALERT (real detections) are excluded. Detections are
+        events, not problems, and -- unlike offline/error alerts --
+        they never flip to active=False on their own when they age out of
+        view (see monitoring/services/dashboard.py:_detections_queryset),
+        so leaving them uncounted here was letting an old, long-gone
+        detection keep inflating "N active camera alert(s)" on the
+        dashboard indefinitely.
     """
+
+    device_error_types = [
+        AlertType.DEVICE_ERROR,
+        AlertType.MQTT_ERROR,
+        AlertType.SYSTEM_ERROR,
+    ]
 
     locations = (
         Location.objects.annotate(
@@ -408,7 +483,12 @@ def get_locations_with_problems(limit=10):
             ),
             active_device_alerts=Count(
                 "devices__alerts",
-                filter=Q(devices__active=True, devices__alerts__active=True),
+                filter=Q(
+                    devices__active=True,
+                    devices__alerts__active=True,
+                    devices__alerts__alert_type__in=device_error_types,
+                )
+                & ~_stale_error_alert_q("devices__alerts__"),
                 distinct=True,
             ),
             offline_cameras=Count(
@@ -422,8 +502,11 @@ def get_locations_with_problems(limit=10):
             active_camera_alerts=Count(
                 "devices__cameras__alerts",
                 filter=Q(
-                    devices__cameras__active=True, devices__cameras__alerts__active=True
-                ),
+                    devices__cameras__active=True,
+                    devices__cameras__alerts__active=True,
+                    devices__cameras__alerts__alert_type=CameraAlertType.CAMERA_ERROR,
+                )
+                & ~_stale_error_alert_q("devices__cameras__alerts__"),
                 distinct=True,
             ),
         )

@@ -14,6 +14,8 @@ import FormField from "../../components/common/FormField";
 import StatusBadge from "../../components/common/StatusBadge";
 import PendingReviewBadge from "../../components/common/PendingReviewBadge";
 import CrudModal from "../../components/crud/CrudModal";
+import RollupIndicator from "../../components/common/RollupIndicator";
+import { useMonitorRollup } from "../../hooks/useMonitorRollup";
 
 import "./Clients.css";
 
@@ -73,6 +75,8 @@ function Clients() {
     [countries]
   );
 
+  const rollup = useMonitorRollup();
+
   const columns = [
     {
       key: "name",
@@ -89,6 +93,11 @@ function Clients() {
       key: "locations_count",
       header: "Locations",
       render: (row) => row.locations_count ?? 0,
+    },
+    {
+      key: "health",
+      header: "Health",
+      render: (row) => <RollupIndicator node={rollup.get("customer", row.id)} />,
     },
     {
       key: "active",

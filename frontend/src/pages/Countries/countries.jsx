@@ -6,12 +6,15 @@ import { useCrudResource } from "../../hooks/useCrudResource";
 import { useAutoRefresh } from "../../hooks/useAutoRefresh";
 
 import PageHeader from "../../components/common/PageHeader";
+import ViewToggle from "../../components/common/ViewToggle";
 import SearchBar from "../../components/common/SearchBar";
 import DataTable from "../../components/common/DataTable";
 import Pagination from "../../components/common/Pagination";
 import FormField from "../../components/common/FormField";
 import PendingReviewBadge from "../../components/common/PendingReviewBadge";
 import CrudModal from "../../components/crud/CrudModal";
+import RollupIndicator from "../../components/common/RollupIndicator";
+import { useMonitorRollup } from "../../hooks/useMonitorRollup";
 
 import "./Countries.css";
 
@@ -41,6 +44,8 @@ function Countries() {
 
   const { lastUpdated, refreshing, refresh } = useAutoRefresh(resource.reload);
 
+  const rollup = useMonitorRollup();
+
   const columns = [
     {
       key: "name",
@@ -57,6 +62,11 @@ function Countries() {
       key: "customers_count",
       header: "Clients",
       render: (row) => row.customers_count ?? 0,
+    },
+    {
+      key: "health",
+      header: "Health",
+      render: (row) => <RollupIndicator node={rollup.get("country", row.id)} />,
     },
   ];
 
@@ -78,6 +88,7 @@ function Countries() {
         refreshing={refreshing}
         onRefresh={refresh}
       >
+        <ViewToggle active="drilldown" />
         <button className="primary-button" onClick={() => resource.openCreate()}>
           + Add Country
         </button>

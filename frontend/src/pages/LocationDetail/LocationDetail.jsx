@@ -13,6 +13,8 @@ import FormField from "../../components/common/FormField";
 import StatusBadge from "../../components/common/StatusBadge";
 import PendingReviewBadge from "../../components/common/PendingReviewBadge";
 import CrudModal from "../../components/crud/CrudModal";
+import RollupIndicator from "../../components/common/RollupIndicator";
+import { useMonitorRollup } from "../../hooks/useMonitorRollup";
 
 const EMPTY_FORM = {
   name: "",
@@ -38,6 +40,7 @@ function LocationDetail() {
   }, [locationId]);
 
   const { lastUpdated, refreshing, refresh } = useAutoRefresh(loadLocation);
+  const rollup = useMonitorRollup();
 
   const devices = useCrudResource({
     api: devicesApi,
@@ -96,6 +99,11 @@ function LocationDetail() {
       render: (row) => <StatusBadge status={row.status} />,
     },
     {
+      key: "health",
+      header: "Health",
+      render: (row) => <RollupIndicator node={rollup.get("device", row.id)} />,
+    },
+    {
       key: "cameras_count",
       header: "Cameras",
       render: (row) => row.cameras_count ?? 0,
@@ -151,6 +159,7 @@ function LocationDetail() {
                 <h2>{location.name}</h2>
                 <StatusBadge status={location.active ? "active" : "inactive"} />
                 {location.pending_review && <PendingReviewBadge />}
+                <RollupIndicator node={rollup.get("location", location.id)} showLabel />
               </div>
 
               <div className="detail-summary-meta">

@@ -9,6 +9,7 @@ from monitoring.services.dashboard import (
     get_dashboard_data,
     get_problem_alerts,
 )
+from monitoring.services.tree import get_monitor_tree
 
 
 class DashboardView(APIView):
@@ -160,3 +161,20 @@ class CameraAlertResolveView(APIView):
             alert.save(update_fields=["active", "resolved_at", "manually_resolved_at"])
 
         return Response({"id": alert.id, "active": alert.active})
+
+
+class MonitorTreeView(APIView):
+    """
+    The Country -> Customer -> Location -> Device -> Camera tree for the
+    "Monitor > Views" page, with rolled-up status per node.
+
+    Endpoint:
+
+        GET /api/monitor/tree/
+
+    See monitoring/services/tree.py for what system_check/has_alerts/
+    detections_count mean on each node.
+    """
+
+    def get(self, request):
+        return Response({"results": get_monitor_tree()})

@@ -13,6 +13,8 @@ import FormField from "../../components/common/FormField";
 import PendingReviewBadge from "../../components/common/PendingReviewBadge";
 import StatusBadge from "../../components/common/StatusBadge";
 import CrudModal from "../../components/crud/CrudModal";
+import RollupIndicator from "../../components/common/RollupIndicator";
+import { useMonitorRollup } from "../../hooks/useMonitorRollup";
 
 const EMPTY_FORM = { name: "", description: "", active: true };
 
@@ -33,6 +35,8 @@ function CountryDetail() {
   }, [countryId]);
 
   const { lastUpdated, refreshing, refresh } = useAutoRefresh(loadCountry);
+
+  const rollup = useMonitorRollup();
 
   const customers = useCrudResource({
     api: customersApi,
@@ -86,6 +90,11 @@ function CountryDetail() {
       render: (row) => row.locations_count ?? 0,
     },
     {
+      key: "health",
+      header: "Health",
+      render: (row) => <RollupIndicator node={rollup.get("customer", row.id)} />,
+    },
+    {
       key: "active",
       header: "Status",
       render: (row) => <StatusBadge status={row.active ? "active" : "inactive"} />,
@@ -131,6 +140,7 @@ function CountryDetail() {
               <div className="detail-summary-title">
                 <h2>{country.name}</h2>
                 {country.pending_review && <PendingReviewBadge />}
+                <RollupIndicator node={rollup.get("country", country.id)} showLabel />
               </div>
 
               <div className="detail-summary-meta">

@@ -11,6 +11,7 @@ from monitoring.views import (
     DashboardView,
     DetectionsView,
     DeviceAlertResolveView,
+    MonitorTreeView,
     ProblemsView,
 )
 
@@ -28,6 +29,9 @@ router.register("cameras", CameraViewSet)
 urlpatterns = [
     *router.urls,
     path("dashboard/", DashboardView.as_view(), name="dashboard"),
+    # Full Country > Customer > Location > Device > Camera tree for the
+    # "Monitor > Views" page, with per-node status/alerts/detections rollup.
+    path("monitor/tree/", MonitorTreeView.as_view(), name="monitor-tree"),
     # Device/camera health & connectivity problems (offline, unhealthy
     # component, MQTT/system errors, camera errors).
     path("problems/", ProblemsView.as_view(), name="problems"),

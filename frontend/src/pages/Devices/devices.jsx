@@ -15,6 +15,8 @@ import StatusBadge from "../../components/common/StatusBadge";
 import PendingReviewBadge from "../../components/common/PendingReviewBadge";
 import NotOnMqttBadge from "../../components/common/NotOnMqttBadge";
 import CrudModal from "../../components/crud/CrudModal";
+import RollupIndicator from "../../components/common/RollupIndicator";
+import { useMonitorRollup } from "../../hooks/useMonitorRollup";
 
 import "./Devices.css";
 
@@ -96,6 +98,8 @@ function Devices() {
     [locations]
   );
 
+  const rollup = useMonitorRollup();
+
   const columns = [
     {
       key: "name",
@@ -117,6 +121,11 @@ function Devices() {
           </span>
         );
       },
+    },
+    {
+      key: "health",
+      header: "Health",
+      render: (row) => <RollupIndicator node={rollup.get("device", row.id)} />,
     },
     {
       key: "status",

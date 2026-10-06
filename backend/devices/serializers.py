@@ -1,9 +1,17 @@
+from django.conf import settings
+from django.utils import timezone
 from rest_framework import serializers
 
 from locations.models import Location
 from locations.serializers import LocationSummarySerializer
 
 from .models import Device
+
+# Mirrors monitoring/services/dashboard.py:_stale_error_alert_q -- kept as
+# a local copy of the same rule rather than importing the monitoring app
+# here (see the LatestHeartbeatSerializer note above on keeping this
+# module independent of it). If that rule ever changes, update both.
+_ERROR_ALERT_TYPES = {"DEVICE_ERROR", "MQTT_ERROR", "SYSTEM_ERROR"}
 
 
 class LatestHeartbeatSerializer(serializers.Serializer):
@@ -162,6 +170,18 @@ class DeviceSerializer(serializers.ModelSerializer):
                 return "health"
             return "error"
 
+        # An "error"-category alert stops counting as current after
+        # settings.ALERT_VISIBLE_HOURS, same as everywhere else it's
+        # shown (dashboard, alerts page, monitor tree) -- otherwise a
+        # stale-but-still-active error would keep showing up here even
+        # after it's disappeared everywhere else.
+        visible_cutoff = timezone.now() - timezone.timedelta(hours=settings.ALERT_VISIBLE_HOURS)
+
+        def is_visible(alert):
+            if alert.alert_type in _ERROR_ALERT_TYPES:
+                return alert.created_at >= visible_cutoff
+            return True
+
         return [
             {
                 "id": alert.id,
@@ -173,8 +193,9 @@ class DeviceSerializer(serializers.ModelSerializer):
                 "created_at": alert.created_at,
                 "resolved_at": alert.resolved_at,
             }
-            for alert in list(obj.alerts.all())[:30]
-        ]
+            for alert in obj.alerts.all()
+            if is_visible(alert)
+        ][:30]
 
     def validate_name(self, value):
         value = value.strip()

@@ -15,6 +15,8 @@ import StatusBadge from "../../components/common/StatusBadge";
 import PendingReviewBadge from "../../components/common/PendingReviewBadge";
 import NotOnMqttBadge from "../../components/common/NotOnMqttBadge";
 import CrudModal from "../../components/crud/CrudModal";
+import RollupIndicator from "../../components/common/RollupIndicator";
+import { useMonitorRollup } from "../../hooks/useMonitorRollup";
 
 import "./Cameras.css";
 
@@ -95,6 +97,8 @@ function Cameras() {
     [devices]
   );
 
+  const rollup = useMonitorRollup();
+
   const columns = [
     {
       key: "name",
@@ -109,6 +113,11 @@ function Cameras() {
       ),
     },
     { key: "channel", header: "Ch." },
+    {
+      key: "health",
+      header: "Health",
+      render: (row) => <RollupIndicator node={rollup.get("camera", row.id)} />,
+    },
     {
       key: "status",
       header: "Status",
