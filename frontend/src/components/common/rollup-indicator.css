@@ -65,4 +65,5 @@
 
 .rollup-detections-text {
   font-weight: var(--weight-medium);
+  margin-left: 5px;
 }
