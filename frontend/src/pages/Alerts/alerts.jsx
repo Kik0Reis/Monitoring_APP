@@ -97,8 +97,8 @@ function prepareRow(item) {
     ...item,
     dateKey: date ? `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}` : "",
     timeKey: date ? `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}` : "",
-    dateLabel: formatDate(item.created_at),
-    timeLabel: formatTime(item.created_at),
+    dateLabel: date ? formatDate(date) : "—",
+    timeLabel: date ? formatTime(date) : "—",
     source: item.camera_name ?? item.device_name ?? "",
     location: item.location_name ?? "",
     typeLabel: ALERT_TYPE_LABELS[item.alert_type ?? item.type] ?? item.type ?? "Alert",
@@ -245,7 +245,6 @@ function matchesFilter(column, row, filter) {
   if (column.filter === "multiselect") {
     return filter.length === 0 || filter.includes(columnValue(column, row));
   }
-
   if (column.filter === "date") {
     if (filter.from && (!row.dateKey || row.dateKey < filter.from)) return false;
     if (filter.to && (!row.dateKey || row.dateKey > filter.to)) return false;
