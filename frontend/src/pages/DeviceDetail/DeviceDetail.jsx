@@ -11,6 +11,7 @@ import Breadcrumbs from "../../components/common/Breadcrumbs";
 import DataTable from "../../components/common/DataTable";
 import FormField from "../../components/common/FormField";
 import StatusBadge from "../../components/common/StatusBadge";
+import ActiveBadge from "../../components/common/ActiveBadge";
 import PendingReviewBadge from "../../components/common/PendingReviewBadge";
 import NotOnMqttBadge from "../../components/common/NotOnMqttBadge";
 import ComponentCard from "../../components/common/ComponentCard";
@@ -151,6 +152,11 @@ function DeviceDetail() {
       render: (row) => <StatusBadge status={row.status} />,
     },
     {
+      key: "active",
+      header: "Active",
+      render: (row) => <ActiveBadge active={row.active} />,
+    },
+    {
       key: "health",
       header: "Health",
       render: (row) => <RollupIndicator node={rollup.get("camera", row.id)} />,
@@ -272,6 +278,10 @@ function DeviceDetail() {
                 <div className="detail-meta-item">
                   <span>Last Seen</span>
                   <strong>{formatTimestamp(device.last_seen)}</strong>
+                </div>
+                <div className="detail-meta-item">
+                  <span>Active</span>
+                  <ActiveBadge active={device.active} />
                 </div>
                 <div className="detail-meta-item">
                   <span>Cameras</span>

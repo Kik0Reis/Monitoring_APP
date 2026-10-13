@@ -12,11 +12,13 @@ import DataTable from "../../components/common/DataTable";
 import Pagination from "../../components/common/Pagination";
 import FormField from "../../components/common/FormField";
 import StatusBadge from "../../components/common/StatusBadge";
+import ActiveBadge from "../../components/common/ActiveBadge";
 import PendingReviewBadge from "../../components/common/PendingReviewBadge";
 import NotOnMqttBadge from "../../components/common/NotOnMqttBadge";
 import CrudModal from "../../components/crud/CrudModal";
 import RollupIndicator from "../../components/common/RollupIndicator";
 import { useMonitorRollup } from "../../hooks/useMonitorRollup";
+import { formatTimestamp } from "../../utils/formatTimestamp";
 
 import "./Cameras.css";
 
@@ -124,10 +126,14 @@ function Cameras() {
       render: (row) => <StatusBadge status={row.status} />,
     },
     {
+      key: "active",
+      header: "Active",
+      render: (row) => <ActiveBadge active={row.active} />,
+    },
+    {
       key: "last_seen",
       header: "Last Seen",
-      render: (row) =>
-        row.last_seen ? new Date(row.last_seen).toLocaleString() : "—",
+      render: (row) => formatTimestamp(row.last_seen),
     },
   ];
 

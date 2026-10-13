@@ -11,10 +11,12 @@ import Breadcrumbs from "../../components/common/Breadcrumbs";
 import DataTable from "../../components/common/DataTable";
 import FormField from "../../components/common/FormField";
 import StatusBadge from "../../components/common/StatusBadge";
+import ActiveBadge from "../../components/common/ActiveBadge";
 import PendingReviewBadge from "../../components/common/PendingReviewBadge";
 import CrudModal from "../../components/crud/CrudModal";
 import RollupIndicator from "../../components/common/RollupIndicator";
 import { useMonitorRollup } from "../../hooks/useMonitorRollup";
+import { formatTimestamp } from "../../utils/formatTimestamp";
 
 const EMPTY_FORM = {
   name: "",
@@ -99,6 +101,11 @@ function LocationDetail() {
       render: (row) => <StatusBadge status={row.status} />,
     },
     {
+      key: "active",
+      header: "Active",
+      render: (row) => <ActiveBadge active={row.active} />,
+    },
+    {
       key: "health",
       header: "Health",
       render: (row) => <RollupIndicator node={rollup.get("device", row.id)} />,
@@ -111,8 +118,7 @@ function LocationDetail() {
     {
       key: "last_seen",
       header: "Last Seen",
-      render: (row) =>
-        row.last_seen ? new Date(row.last_seen).toLocaleString() : "—",
+      render: (row) => formatTimestamp(row.last_seen),
     },
   ];
 
