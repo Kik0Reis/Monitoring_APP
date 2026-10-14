@@ -170,11 +170,14 @@ class MonitorTreeView(APIView):
 
     Endpoint:
 
-        GET /api/monitor/tree/
+        GET /api/monitor/tree/                    everything (default)
+        GET /api/monitor/tree/?active_only=true   hide inactive records, and
+                                                  ignore them in the rollup
 
     See monitoring/services/tree.py for what system_check/has_alerts/
     detections_count mean on each node.
     """
 
     def get(self, request):
-        return Response({"results": get_monitor_tree()})
+        active_only = request.query_params.get("active_only", "").lower() in ("1", "true", "yes")
+        return Response({"results": get_monitor_tree(active_only=active_only)})

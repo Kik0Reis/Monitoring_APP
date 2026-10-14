@@ -177,8 +177,10 @@ export const alertsApi = {
 // "Monitor > Views" page (see monitoring/services/tree.py for what each
 // node's system_check/has_alerts/detections_count mean).
 export const monitorApi = {
-  tree() {
-    return apiRequest("/monitor/tree/");
+  // activeOnly=true hides inactive customers/locations/devices/cameras and
+  // ignores them in every node's rollup colour (see tree.py).
+  tree({ activeOnly = false } = {}) {
+    return apiRequest(`/monitor/tree/${activeOnly ? "?active_only=true" : ""}`);
   },
 };
 

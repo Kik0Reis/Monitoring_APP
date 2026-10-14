@@ -1209,3 +1209,20 @@
     grid-template-columns: repeat(2, 1fr);
   }
 }
+
+/* Active/Inactive badge inside the "detail-meta-item" blocks: undo the
+   uppercase/muted styling those blocks apply to every <span>. */
+.detail-meta-item .status-badge {
+  align-self: flex-start;
+  text-transform: none;
+  letter-spacing: normal;
+  font-size: var(--text-sm);
+}
+
+.detail-meta-item .status-badge-active {
+  color: var(--color-success);
+}
+
+.detail-meta-item .status-badge-unknown {
+  color: var(--color-ink-soft);
+}

@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ChevronRight, ExternalLink, Globe, Users, MapPin, Cpu, Camera } from "lucide-react";
 
@@ -67,6 +67,79 @@ function childSummary(node) {
   return `${count} ${label}${count === 1 ? "" : "s"}`;
 }
 
+/** Table at the top of the page that explains what each indicator in the
+ * tree means. The wording follows the current scope: with "Active only" the
+ * colours only look at active devices/cameras, with "All" inactive ones
+ * count too. */
+function IndicatorsTable({ activeOnly }) {
+  const scope = activeOnly ? "active " : "";
+
+  return (
+    <table className="tree-key-table">
+      <thead>
+        <tr>
+          <th>Indicator</th>
+          <th>Meaning</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>
+            <span className="tree-key-indicator">
+              <span className="tree-status-dot tree-status-critical" /> Red
+            </span>
+          </td>
+          <td>
+            Offline: at least one {scope}device or camera in this branch is offline.
+          </td>
+        </tr>
+        <tr>
+          <td>
+            <span className="tree-key-indicator">
+              <span className="tree-status-dot tree-status-warning" /> Amber
+            </span>
+          </td>
+          <td>
+            Error: there is an active error alert on {activeOnly ? "an active " : "a "}
+            device or camera in this branch (and nothing is offline).
+          </td>
+        </tr>
+        <tr>
+          <td>
+            <span className="tree-key-indicator">
+              <span className="tree-status-dot tree-status-ok" /> Green
+            </span>
+          </td>
+          <td>All clear: nothing offline and no active error alerts in this branch.</td>
+        </tr>
+        <tr>
+          <td>
+            <span className="tree-key-indicator">
+              <span className="tree-indicator tree-detections-badge">3</span> Detections
+            </span>
+          </td>
+          <td>
+            Number of recent detections reported by {scope}cameras in this branch.
+          </td>
+        </tr>
+        {!activeOnly && (
+          <tr>
+            <td>
+              <span className="tree-key-indicator">
+                <span className="tree-inactive-tag">Inactive</span>
+              </span>
+            </td>
+            <td>
+              Switched off. While &quot;All&quot; is selected, inactive devices and cameras also
+              count towards the colours above.
+            </td>
+          </tr>
+        )}
+      </tbody>
+    </table>
+  );
+}
+
 function TreeNode({ node, depth, expanded, onToggle, onOpen }) {
   const isOpen = expanded.has(nodeKey(node));
   const hasChildren = node.children.length > 0;
@@ -76,7 +149,7 @@ function TreeNode({ node, depth, expanded, onToggle, onOpen }) {
   return (
     <div className="tree-node">
       <div
-        className={`tree-row ${hasChildren ? "has-children" : ""}`}
+        className={`tree-row ${hasChildren ? "has-children" : ""} ${node.active === false ? "inactive" : ""}`}
         style={{ paddingLeft: 12 + depth * 22 }}
         onClick={() => hasChildren && onToggle(node)}
       >
@@ -90,6 +163,8 @@ function TreeNode({ node, depth, expanded, onToggle, onOpen }) {
         <span className="tree-name">{node.name}</span>
 
         {node.pending_review && <PendingReviewBadge />}
+
+        {node.active === false && <span className="tree-inactive-tag">Inactive</span>}
 
         {summary && <span className="tree-child-summary">{summary}</span>}
 
@@ -167,11 +242,15 @@ function MonitorViews() {
   const [error, setError] = useState("");
   const [expanded, setExpanded] = useState(new Set());
   const [initialized, setInitialized] = useState(false);
+  // "Active only" hides inactive customers/locations/devices/cameras and
+  // ignores them in every colour; "All" shows them and counts them. The
+  // backend does the filtering/rollup (see monitoring/services/tree.py).
+  const [activeOnly, setActiveOnly] = useState(true);
 
   const loadTree = useCallback(async () => {
     try {
       setError("");
-      const data = await monitorApi.tree();
+      const data = await monitorApi.tree({ activeOnly });
       const results = data.results ?? [];
       setTree(results);
 
@@ -189,9 +268,28 @@ function MonitorViews() {
     } catch (err) {
       setError(err.message || "Failed to load the monitor tree.");
     }
-  }, [initialized]);
+  }, [initialized, activeOnly]);
 
   const { lastUpdated, refreshing, refresh } = useAutoRefresh(loadTree);
+
+  // Switching scope reloads right away (the 60s timer would be too slow) and
+  // re-opens the branches that have a problem in the new scope. Skipped on
+  // the first render because useAutoRefresh already does the initial load.
+  const firstRender = useRef(true);
+  useEffect(() => {
+    if (firstRender.current) {
+      firstRender.current = false;
+      return;
+    }
+    refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeOnly]);
+
+  function changeScope(nextActiveOnly) {
+    if (nextActiveOnly === activeOnly) return;
+    setInitialized(false);
+    setActiveOnly(nextActiveOnly);
+  }
 
   function toggleNode(node) {
     setExpanded((current) => {
@@ -239,6 +337,22 @@ function MonitorViews() {
         onRefresh={refresh}
       >
         <ViewToggle active="tree" />
+        <div className="view-toggle" role="group" aria-label="Which items to show">
+          <button
+            type="button"
+            className={`view-toggle-option ${activeOnly ? "active" : ""}`}
+            onClick={() => changeScope(true)}
+          >
+            Active only
+          </button>
+          <button
+            type="button"
+            className={`view-toggle-option ${!activeOnly ? "active" : ""}`}
+            onClick={() => changeScope(false)}
+          >
+            All
+          </button>
+        </div>
         <button type="button" className="text-button" onClick={expandAll}>
           Expand all
         </button>
@@ -248,6 +362,8 @@ function MonitorViews() {
       </PageHeader>
 
       {error && <div className="error-message">{error}</div>}
+
+      <IndicatorsTable activeOnly={activeOnly} />
 
       <div className="tree-container">
         {tree.length === 0 ? (

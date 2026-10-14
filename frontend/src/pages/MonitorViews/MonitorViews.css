@@ -135,3 +135,71 @@
 .tree-children {
   background: var(--color-bg);
 }
+
+/* ---- indicators table above the tree ---- */
+
+.tree-key-table {
+  width: 100%;
+  margin-bottom: var(--space-4);
+  border-collapse: separate;
+  border-spacing: 0;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.tree-key-table th,
+.tree-key-table td {
+  padding: 8px var(--space-4);
+  text-align: left;
+  font-size: var(--text-sm);
+  border-bottom: 1px solid var(--color-border-soft);
+}
+
+.tree-key-table thead th {
+  background: var(--color-surface-alt);
+  color: var(--color-muted);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.tree-key-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.tree-key-table td:first-child {
+  width: 170px;
+  white-space: nowrap;
+  font-weight: var(--weight-semibold);
+  color: var(--color-ink);
+}
+
+.tree-key-table td:last-child {
+  color: var(--color-ink-soft);
+}
+
+.tree-key-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* ---- inactive rows (only visible when "All" is selected) ---- */
+
+.tree-row.inactive .tree-name,
+.tree-row.inactive .tree-type-icon {
+  opacity: 0.55;
+}
+
+.tree-inactive-tag {
+  flex: 0 0 auto;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--color-unknown-bg);
+  color: var(--color-ink-soft);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+}

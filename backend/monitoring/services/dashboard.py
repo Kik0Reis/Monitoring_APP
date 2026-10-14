@@ -290,6 +290,7 @@ def _serialize_camera_alerts(camera_alerts):
         camera = alert.camera
         device = camera.device
         location = device.location if device else None
+        payload = alert.raw_payload if isinstance(alert.raw_payload, dict) else {}
 
         alerts.append(
             {
@@ -304,6 +305,11 @@ def _serialize_camera_alerts(camera_alerts):
                 "location_name": location.name if location else None,
                 "camera_id": camera.id,
                 "camera_name": camera.name,
+                # what the camera detected / which action fired, from the MQTT
+                # payload (only set for real detections)
+                "detected": payload.get("class_label"),
+                "action_code": payload.get("action_code"),
+                "confidence": payload.get("confidence"),
                 "message": alert.message,
                 "active": alert.active,
                 "created_at": alert.created_at,

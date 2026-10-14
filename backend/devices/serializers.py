@@ -208,14 +208,9 @@ class DeviceSerializer(serializers.ModelSerializer):
         return value
 
     def validate_mqtt_identifier(self, value):
-        value = value.strip()
-
-        if len(value) < 3:
-            raise serializers.ValidationError(
-                "MQTT identifier must contain at least 3 characters."
-            )
-
-        return value
+        # Still required (an empty value is rejected by the field itself);
+        # there is no minimum length.
+        return value.strip()
 
     def validate_serial_number(self, value):
         return value.strip().upper()

@@ -17,6 +17,19 @@ level of the tree:
   - detections_count: how many recent detections (same
     DETECTION_VISIBLE_HOURS window as the dashboard) sit under this node.
 
+Every node also carries "active" (the record's own active flag; countries
+have none, so they are always True).
+
+get_monitor_tree(active_only=...) controls how inactive records count:
+
+  - active_only=False (default): everything is in the tree and inactive
+    devices/cameras count towards the rollup like any other, so an inactive
+    node that is offline turns its parents red.
+  - active_only=True: inactive customers/locations/devices/cameras are left
+    out entirely (together with everything under them), so they can't
+    affect any colour or count. Parents are red only if an *active*
+    device/camera below them is offline.
+
 This intentionally loads the whole tree in a handful of queries rather
 than one query per node -- fine at the scale this app runs at (see the
 Future Enhancements section of the project plan for when that stops being
@@ -31,7 +44,10 @@ from monitoring.models import AlertType, CameraAlert, CameraAlertType, DeviceAle
 from monitoring.services.dashboard import _detections_queryset, _stale_error_alert_q
 
 
-def get_monitor_tree():
+def get_monitor_tree(active_only=False):
+    def keep(record):
+        return record.active or not active_only
+
     countries = (
         Country.objects.all()
         .prefetch_related(
@@ -78,6 +94,7 @@ def get_monitor_tree():
             "id": camera.id,
             "name": camera.name,
             "status": camera.status.lower(),
+            "active": camera.active,
             "pending_review": camera.pending_review,
             "system_check": "red" if red else "green",
             "has_alerts": camera.id in camera_error_ids,
@@ -86,13 +103,14 @@ def get_monitor_tree():
         }
 
     def device_node(device):
-        cameras = [camera_node(c) for c in device.cameras.all()]
+        cameras = [camera_node(c) for c in device.cameras.all() if keep(c)]
         own_red = device.status == DeviceStatus.OFFLINE
         return {
             "type": "device",
             "id": device.id,
             "name": device.name,
             "status": device.status.lower(),
+            "active": device.active,
             "pending_review": device.pending_review,
             "system_check": "red"
             if own_red or any(c["system_check"] == "red" for c in cameras)
@@ -103,11 +121,12 @@ def get_monitor_tree():
         }
 
     def location_node(location):
-        devices = [device_node(d) for d in location.devices.all()]
+        devices = [device_node(d) for d in location.devices.all() if keep(d)]
         return {
             "type": "location",
             "id": location.id,
             "name": location.name,
+            "active": location.active,
             "pending_review": location.pending_review,
             "system_check": "red" if any(d["system_check"] == "red" for d in devices) else "green",
             "has_alerts": any(d["has_alerts"] for d in devices),
@@ -116,11 +135,12 @@ def get_monitor_tree():
         }
 
     def customer_node(customer):
-        locations = [location_node(l) for l in customer.locations.all()]
+        locations = [location_node(l) for l in customer.locations.all() if keep(l)]
         return {
             "type": "customer",
             "id": customer.id,
             "name": customer.name,
+            "active": customer.active,
             "pending_review": customer.pending_review,
             "system_check": "red" if any(l["system_check"] == "red" for l in locations) else "green",
             "has_alerts": any(l["has_alerts"] for l in locations),
@@ -129,11 +149,12 @@ def get_monitor_tree():
         }
 
     def country_node(country):
-        customers = [customer_node(c) for c in country.customers.all()]
+        customers = [customer_node(c) for c in country.customers.all() if keep(c)]
         return {
             "type": "country",
             "id": country.id,
             "name": country.name,
+            "active": True,
             "pending_review": country.pending_review,
             "system_check": "red" if any(c["system_check"] == "red" for c in customers) else "green",
             "has_alerts": any(c["has_alerts"] for c in customers),

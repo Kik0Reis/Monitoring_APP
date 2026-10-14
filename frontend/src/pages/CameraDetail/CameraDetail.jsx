@@ -10,6 +10,7 @@ import PageHeader from "../../components/common/PageHeader";
 import Breadcrumbs from "../../components/common/Breadcrumbs";
 import FormField from "../../components/common/FormField";
 import StatusBadge from "../../components/common/StatusBadge";
+import ActiveBadge from "../../components/common/ActiveBadge";
 import PendingReviewBadge from "../../components/common/PendingReviewBadge";
 import NotOnMqttBadge from "../../components/common/NotOnMqttBadge";
 import CollapsibleSection from "../../components/common/CollapsibleSection";
@@ -215,8 +216,8 @@ function CameraDetail() {
                   <strong>{formatTimestamp(camera.last_seen)}</strong>
                 </div>
                 <div className="detail-meta-item">
-                  <span>Status</span>
-                  <strong>{camera.active ? "Active" : "Inactive"}</strong>
+                  <span>Active</span>
+                  <ActiveBadge active={camera.active} />
                 </div>
               </div>
             </div>

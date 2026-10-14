@@ -74,3 +74,137 @@
   font-size: var(--text-xs);
   font-weight: var(--weight-semibold);
 }
+
+/* ---- Alerts table (sortable headers + filter row) ---- */
+
+.alerts-table-scroll {
+  max-height: calc(100vh - 340px);
+  min-height: 240px;
+  overflow: auto;
+}
+
+.alerts-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  white-space: nowrap;
+}
+
+/* second header row sticks right under the first one */
+.alerts-table .alerts-filter-row th {
+  top: 37px;
+  z-index: 1;
+  padding-top: 0;
+  padding-bottom: var(--space-3);
+  font-weight: var(--weight-regular);
+}
+
+.alerts-table tbody td {
+  white-space: nowrap;
+}
+
+.alerts-table tbody td .alerts-message {
+  display: inline-block;
+  max-width: 360px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+}
+
+.alerts-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: var(--weight-semibold);
+  cursor: pointer;
+}
+
+.alerts-sort svg {
+  opacity: 0.45;
+}
+
+.alerts-sort:hover,
+.alerts-sort.active {
+  color: var(--color-ink);
+}
+
+.alerts-sort.active svg {
+  opacity: 1;
+  color: var(--color-brand-strong);
+}
+
+.alerts-filter-input {
+  width: 100%;
+  min-width: 90px;
+  padding: 6px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-ink);
+  font: inherit;
+  font-size: var(--text-sm);
+  color-scheme: dark;
+}
+
+.alerts-filter-input:focus {
+  outline: none;
+  border-color: var(--color-brand-strong);
+  box-shadow: 0 0 0 3px rgba(99, 56, 246, 0.18);
+}
+
+.alerts-filter-range {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.alerts-chip {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--color-warning-bg);
+  color: var(--color-warning);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  text-transform: capitalize;
+}
+
+.alerts-clear-filters {
+  padding: 4px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-alt);
+  color: var(--color-ink-soft);
+  font: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.alerts-clear-filters:hover {
+  border-color: var(--color-brand-strong);
+  color: var(--color-ink);
+}
+
+/* resolve button is hidden until the row is hovered (see common.css) */
+.alerts-table tbody tr:hover .alert-row-resolve:not(:disabled) {
+  opacity: 1;
+}
+
+/* From / To labels on the date and time range filters */
+.alerts-filter-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.alerts-filter-field span {
+  flex: 0 0 34px;
+  color: var(--color-muted);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+}
