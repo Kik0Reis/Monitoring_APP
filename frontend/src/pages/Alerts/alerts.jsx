@@ -9,6 +9,7 @@ import PageHeader from "../../components/common/PageHeader";
 import StatusBadge from "../../components/common/StatusBadge";
 import MultiSelect from "../../components/common/MultiSelect";
 import PickerInput from "../../components/common/PickerInput";
+import { DateInputPt, TimeInputPt } from "../../components/common/PtDateTimeInput";
 import { formatDate, formatTime } from "../../utils/formatTimestamp";
 
 import "./Alerts.css";
@@ -97,8 +98,8 @@ function prepareRow(item) {
     ...item,
     dateKey: date ? `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}` : "",
     timeKey: date ? `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}` : "",
-    dateLabel: formatDate(item.created_at),
-    timeLabel: formatTime(item.created_at),
+dateLabel: date ? formatDate(date) : (item.created_at ? formatDate(item.created_at) : "—"),
+timeLabel: date ? formatTime(date) : (item.created_at ? formatTime(item.created_at) : "—"),
     source: item.camera_name ?? item.device_name ?? "",
     location: item.location_name ?? "",
     typeLabel: ALERT_TYPE_LABELS[item.alert_type ?? item.type] ?? item.type ?? "Alert",
@@ -245,7 +246,6 @@ function matchesFilter(column, row, filter) {
   if (column.filter === "multiselect") {
     return filter.length === 0 || filter.includes(columnValue(column, row));
   }
-
   if (column.filter === "date") {
     if (filter.from && (!row.dateKey || row.dateKey < filter.from)) return false;
     if (filter.to && (!row.dateKey || row.dateKey > filter.to)) return false;
@@ -328,14 +328,17 @@ function FilterCell({ column, value, options, onChange }) {
   if (column.filter === "date" || column.filter === "time") {
     // always Portuguese (dd/mm/aaaa, 24h), whatever the browser language is
     const mode = column.filter;
+    const RangeInput = column.filter === "date" ? DateInputPt : TimeInputPt;
     const range = value ?? {};
 
     return (
       <div className="alerts-filter-range">
         <label className="alerts-filter-field">
           <span>From</span>
-          <PickerInput
-            mode={mode}
+          <RangeInput
+            className="alerts-filter-input"
+            ariaLabel={`${column.header} from`}
+            value={range.from ?? ""}
             className="alerts-filter-input"
             ariaLabel={`${column.header} from`}
             value={range.from ?? ""}
@@ -344,8 +347,10 @@ function FilterCell({ column, value, options, onChange }) {
         </label>
         <label className="alerts-filter-field">
           <span>To</span>
-          <PickerInput
-            mode={mode}
+          <RangeInput
+            className="alerts-filter-input"
+            ariaLabel={`${column.header} to`}
+            value={range.to ?? ""}
             className="alerts-filter-input"
             ariaLabel={`${column.header} to`}
             value={range.to ?? ""}
