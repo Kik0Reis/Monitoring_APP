@@ -1,8 +1,11 @@
+# admin pages for the monitoring models
+
 from django.contrib import admin
 
 from .models import CameraAlert, DeviceAlert, DeviceHeartbeat
 
 
+# admin page of the device alerts
 @admin.register(DeviceAlert)
 class DeviceAlertAdmin(admin.ModelAdmin):
     list_display = (
@@ -21,6 +24,7 @@ class DeviceAlertAdmin(admin.ModelAdmin):
     ordering = ("-created_at",)
 
 
+# admin page of the camera alerts
 @admin.register(CameraAlert)
 class CameraAlertAdmin(admin.ModelAdmin):
     list_display = (
@@ -39,6 +43,7 @@ class CameraAlertAdmin(admin.ModelAdmin):
     ordering = ("-created_at",)
 
 
+# admin page of the device heartbeats
 @admin.register(DeviceHeartbeat)
 class DeviceHeartbeatAdmin(admin.ModelAdmin):
     list_display = ("device", "received_at", "cpu", "memory", "storage", "temperature")

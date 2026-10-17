@@ -1,0 +1,90 @@
+.detail-summary {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-5);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  margin-bottom: var(--space-6);
+}
+
+.detail-summary-main {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.detail-summary-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.detail-summary-title h2 {
+  margin: 0;
+  font-size: var(--text-xl);
+  font-weight: var(--weight-bold);
+  color: var(--color-ink);
+}
+
+.detail-summary-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-5);
+  margin-top: var(--space-3);
+}
+
+.detail-meta-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.detail-meta-item span {
+  color: var(--color-muted);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.detail-meta-item strong {
+  color: var(--color-ink);
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
+}
+
+.detail-section {
+  margin-bottom: var(--space-6);
+}
+
+.detail-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-4);
+}
+
+.detail-section-header h3 {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semibold);
+  color: var(--color-ink);
+}
+
+/* active/inactive badge inside the detail meta blocks: undo the uppercase and muted style those blocks give every span */
+.detail-meta-item .status-badge {
+  align-self: flex-start;
+  text-transform: none;
+  letter-spacing: normal;
+  font-size: var(--text-sm);
+}
+
+.detail-meta-item .status-badge-active {
+  color: var(--color-success);
+}
+
+.detail-meta-item .status-badge-unknown {
+  color: var(--color-ink-soft);
+}

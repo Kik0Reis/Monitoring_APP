@@ -1,19 +1,15 @@
 import { useCallback, useEffect, useState } from "react";
 
-/**
- * Shared CRUD + search + pagination logic for every list page (Countries,
- * Clients, Locations, Devices, Cameras) so they don't each reimplement it.
- * A page just describes its API client and form shape, this handles the rest.
- *
- * @param {object} config
- * @param {object} config.api - { list, get, create, update, delete }
- * @param {object} config.emptyFormData - shape used to reset the form
- * @param {(formData: object) => object} [config.mapFormToPayload] - defaults to identity
- * @param {(formData: object) => string|null} [config.validate] - return an error message, or null
- * @param {(item: object) => object} [config.mapItemToFormData] - defaults to identity
- * @param {Record<string, string|number>} [config.filters] - fixed filters always sent to the API
- * @param {(item: object) => string} [config.describeItem] - used in the delete confirmation
- */
+// everything a list page needs: loading, search, pagination, and the create / edit / view popup with delete and approve
+// the page only describes its api and its form
+//   api: { list, get, create, update, delete, approve }
+//   emptyFormData: the form when it is empty
+//   mapFormToPayload(formData): the object sent to the api, the form data by default
+//   mapItemToFormData(item): fills the form when editing, the item by default
+//   validate(formData): returns an error message or null
+//   filters: fixed filters always sent to the api
+//   describeItem(item): the name shown in the delete question
+//   autoLoad: false when the page only needs the popup and not the list
 export function useCrudResource({
   api,
   emptyFormData,
@@ -22,6 +18,7 @@ export function useCrudResource({
   mapItemToFormData = (item) => item,
   filters = {},
   describeItem = (item) => item.name,
+  autoLoad = true,
 }) {
   const [items, setItems] = useState([]);
   const [count, setCount] = useState(0);
@@ -31,7 +28,7 @@ export function useCrudResource({
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
 
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(autoLoad);
   const [error, setError] = useState("");
 
   const [modalMode, setModalMode] = useState(null);
@@ -41,9 +38,10 @@ export function useCrudResource({
 
   const filtersKey = JSON.stringify(filters);
 
-  // Load
-
+  // loads the current page of the list with the search and the filters
   const load = useCallback(async () => {
+    if (!autoLoad) return;
+
     try {
       setLoading(true);
       setError("");
@@ -62,8 +60,7 @@ export function useCrudResource({
         }
       });
 
-      const query = `?${params.toString()}`;
-      const data = await api.list(query);
+      const data = await api.list(`?${params.toString()}`);
 
       if (data && Array.isArray(data.results)) {
         setItems(data.results);
@@ -71,7 +68,7 @@ export function useCrudResource({
         setNext(data.next ?? null);
         setPrevious(data.previous ?? null);
       } else {
-        // plain array response, not paginated
+        // the api answered with a plain list, without pages
         const list = data ?? [];
         setItems(list);
         setCount(list.length);
@@ -84,19 +81,18 @@ export function useCrudResource({
       setLoading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [api, search, page, filtersKey]);
+  }, [api, autoLoad, search, page, filtersKey]);
 
+  // loads when something changes, typing in the search waits 300ms so it does not send a request per letter
   useEffect(() => {
     const timer = setTimeout(load, search ? 300 : 0);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [load]);
 
-  // reset to page 1 when search/filters change -- adjusting state during
-  // render (React's recommended pattern) rather than a useEffect
-  const [previousFilterKey, setPreviousFilterKey] = useState(
-    `${search}|${filtersKey}`
-  );
+  // goes back to page 1 when the search or a filter changes
+  // done while rendering, which is the pattern React recommends instead of an effect
+  const [previousFilterKey, setPreviousFilterKey] = useState(`${search}|${filtersKey}`);
 
   if (previousFilterKey !== `${search}|${filtersKey}`) {
     setPreviousFilterKey(`${search}|${filtersKey}`);
@@ -106,8 +102,7 @@ export function useCrudResource({
     }
   }
 
-  // Modal open/close
-
+  // opens the popup to create a record, overrides pre-fills some fields
   function openCreate(overrides = {}) {
     setSelected(null);
     setFormData({ ...emptyFormData, ...overrides });
@@ -115,12 +110,14 @@ export function useCrudResource({
     setModalMode("create");
   }
 
+  // opens the popup with the details of a record
   function openView(item) {
     setSelected(item);
     setError("");
     setModalMode("view");
   }
 
+  // opens the popup to edit a record
   function openEdit(item) {
     setSelected(item);
     setFormData({ ...emptyFormData, ...mapItemToFormData(item) });
@@ -128,6 +125,7 @@ export function useCrudResource({
     setModalMode("edit");
   }
 
+  // closes the popup, it stays open while the record is being saved
   function closeModal() {
     if (saving) {
       return;
@@ -138,6 +136,7 @@ export function useCrudResource({
     setFormData(emptyFormData);
   }
 
+  // copies what was typed into the form data
   function handleFormChange(event) {
     const { name, value, type, checked } = event.target;
 
@@ -147,8 +146,7 @@ export function useCrudResource({
     }));
   }
 
-  // Submit (create/edit)
-
+  // validates and saves the form, creating or updating depending on the popup mode
   async function handleSubmit() {
     if (validate) {
       const validationError = validate(formData);
@@ -185,14 +183,9 @@ export function useCrudResource({
     }
   }
 
-  // Delete
-
+  // asks for confirmation and deletes a record
   async function handleDelete(item) {
-    const confirmed = window.confirm(
-      `Are you sure you want to delete ${describeItem(item)}?`
-    );
-
-    if (!confirmed) {
+    if (!window.confirm(`Are you sure you want to delete ${describeItem(item)}?`)) {
       return;
     }
 
@@ -205,24 +198,30 @@ export function useCrudResource({
     }
   }
 
+  // confirms a record that was created automatically from mqtt
+  async function handleApprove(item) {
+    try {
+      await api.approve(item.id);
+      await load();
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
   return {
     items,
-    count,
-    hasNext: Boolean(next),
-    hasPrevious: Boolean(previous),
-    page,
-    setPage,
-    search,
-    setSearch,
     loading,
     error,
     setError,
     reload: load,
 
+    search,
+    setSearch,
+    pagination: { page, setPage, count, hasNext: Boolean(next), hasPrevious: Boolean(previous) },
+
     modalMode,
     selected,
     formData,
-    setFormData,
     saving,
 
     openCreate,
@@ -232,6 +231,7 @@ export function useCrudResource({
     handleFormChange,
     handleSubmit,
     handleDelete,
+    handleApprove,
   };
 }
 

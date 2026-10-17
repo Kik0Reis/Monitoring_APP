@@ -1,11 +1,5 @@
-/**
- * Generic table: one implementation shared by every resource list and
- * every drilldown "children" table, instead of near-identical <table>
- * markup repeated on every page.
- *
- * columns: [{ key, header, render?(row), align? }]
- * actions: (row) => ReactNode, rendered in a trailing "Actions" column
- */
+// table used by every list and by the children tables of the detail pages
+// columns: [{ key, header, render?(row), align? }], actions(row) draws a last column with the row buttons
 function DataTable({
   columns,
   rows,
@@ -17,6 +11,17 @@ function DataTable({
   getRowKey = (row) => row.id,
 }) {
   const columnCount = columns.length + (actions ? 1 : 0);
+  // returns the class of a cell, columns aligned to the right use the same class as the actions column
+  const cellClass = (column) => (column.align === "right" ? "actions-col" : undefined);
+
+  // a single row with a message, used while loading and when there is nothing to show
+  const messageRow = (message) => (
+    <tr>
+      <td colSpan={columnCount} className="empty-row">
+        {message}
+      </td>
+    </tr>
+  );
 
   return (
     <div className="table-card">
@@ -24,10 +29,7 @@ function DataTable({
         <thead>
           <tr>
             {columns.map((column) => (
-              <th
-                key={column.key}
-                className={column.align === "right" ? "actions-col" : undefined}
-              >
+              <th key={column.key} className={cellClass(column)}>
                 {column.header}
               </th>
             ))}
@@ -36,45 +38,29 @@ function DataTable({
         </thead>
 
         <tbody>
-          {loading ? (
-            <tr>
-              <td colSpan={columnCount} className="empty-row">
-                {loadingMessage}
-              </td>
-            </tr>
-          ) : rows.length === 0 ? (
-            <tr>
-              <td colSpan={columnCount} className="empty-row">
-                {emptyMessage}
-              </td>
-            </tr>
-          ) : (
-            rows.map((row) => (
-              <tr
-                key={getRowKey(row)}
-                className={onRowClick ? "clickable-row" : undefined}
-                onClick={onRowClick ? () => onRowClick(row) : undefined}
-              >
-                {columns.map((column) => (
-                  <td
-                    key={column.key}
-                    className={column.align === "right" ? "actions-col" : undefined}
+          {loading
+            ? messageRow(loadingMessage)
+            : rows.length === 0
+              ? messageRow(emptyMessage)
+              : rows.map((row) => (
+                  <tr
+                    key={getRowKey(row)}
+                    className={onRowClick ? "clickable-row" : undefined}
+                    onClick={onRowClick ? () => onRowClick(row) : undefined}
                   >
-                    {column.render ? column.render(row) : row[column.key]}
-                  </td>
-                ))}
+                    {columns.map((column) => (
+                      <td key={column.key} className={cellClass(column)}>
+                        {column.render ? column.render(row) : row[column.key]}
+                      </td>
+                    ))}
 
-                {actions && (
-                  <td
-                    className="actions-col"
-                    onClick={(event) => event.stopPropagation()}
-                  >
-                    {actions(row)}
-                  </td>
-                )}
-              </tr>
-            ))
-          )}
+                    {actions && (
+                      <td className="actions-col" onClick={(event) => event.stopPropagation()}>
+                        {actions(row)}
+                      </td>
+                    )}
+                  </tr>
+                ))}
         </tbody>
       </table>
     </div>

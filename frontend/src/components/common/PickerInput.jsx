@@ -6,6 +6,8 @@ import "flatpickr/dist/flatpickr.min.css";
 import "flatpickr/dist/themes/dark.css";
 
 
+// date or time picker that is always in portuguese (dd/mm/aaaa and 24 hour time) whatever the browser language is
+// mode date: value is yyyy-mm-dd, mode time: value is hh:mm, an empty string means nothing selected
 function PickerInput({ mode, value, onChange, className, ariaLabel }) {
   const inputRef = useRef(null);
   const pickerRef = useRef(null);
@@ -31,7 +33,7 @@ function PickerInput({ mode, value, onChange, className, ariaLabel }) {
       onChange: (_dates, dateString) => onChangeRef.current(dateString),
     });
 
-    // with altInput the visible field is flatpickr's copy, not our <input>
+    // in date mode the visible field is the copy made by flatpickr, not our input
     const visible = picker.altInput ?? picker.input;
     visible.setAttribute("aria-label", ariaLabel);
     visible.setAttribute("autocomplete", "off");
@@ -40,7 +42,7 @@ function PickerInput({ mode, value, onChange, className, ariaLabel }) {
     return () => picker.destroy();
   }, [mode, className, ariaLabel]);
 
-  // follow changes made from outside (e.g. "Clear filters")
+  // follows changes made from outside, for example the clear filters button
   useEffect(() => {
     const picker = pickerRef.current;
     if (picker && picker.input.value !== (value || "")) {
@@ -48,9 +50,8 @@ function PickerInput({ mode, value, onChange, className, ariaLabel }) {
     }
   }, [value]);
 
-  // Date mode: flatpickr shows its own formatted copy of the field (dd/mm/aaaa)
-  // and keeps this one only to hold the yyyy-mm-dd value, so it must be
-  // hidden. Time mode has no copy: this is the visible field.
+  // in date mode flatpickr shows its own copy (dd/mm/aaaa) and this input only holds the yyyy-mm-dd value, so it is hidden
+  // in time mode this input is the visible field
   return (
     <input
       ref={inputRef}

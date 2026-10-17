@@ -1,18 +1,20 @@
+# database model of a camera
+
 from django.db import models
 
 from core.models import TimeStampedModel
 from devices.models import Device
 
 
+# possible statuses of a camera
 class CameraStatus(models.TextChoices):
     ONLINE = "ONLINE", "Online"
     OFFLINE = "OFFLINE", "Offline"
     UNKNOWN = "UNKNOWN", "Unknown"
 
 
+# a camera connected to an edge device, a device can have several
 class Camera(TimeStampedModel):
-    """A camera attached to an Edge device. One device can have several."""
-
     device = models.ForeignKey(Device, on_delete=models.CASCADE, related_name="cameras")
 
     name = models.CharField(max_length=150)
@@ -27,37 +29,24 @@ class Camera(TimeStampedModel):
 
     last_seen = models.DateTimeField(null=True, blank=True)
 
-    # Whether this camera showed up the last time the MQTT subscriber
-    # reconciled its known cameras against the broker (see
-    # monitoring/services/mqtt_reconciliation.py). Unlike `status`, this is
-    # never time-based -- it only flips to False when a full reconcile
-    # cycle genuinely didn't see this camera.
+    # True when the camera was seen in the last mqtt reconciliation, it is not time based
     on_mqtt = models.BooleanField(default=True)
 
-    # Identity info reported on aiaction/.../info/cameras. Blank until
-    # that message arrives; only auto-filled while pending_review=True so
-    # a human's edits are never overwritten by MQTT traffic.
+    # identity info from info/cameras, only filled automatically while pending_review is True
     serial_number = models.CharField(max_length=100, blank=True, default="")
     latitude = models.FloatField(null=True, blank=True)
     longitude = models.FloatField(null=True, blank=True)
 
-    # Per-component breakdown for THIS camera specifically, extracted from
-    # the detectorapi/detector/idmr health messages (which report a dict
-    # keyed by "{camera_id}_ch{channel}"). E.g.:
-    #   {"detectorapi": {"stage": "idle", ...}, "detector": {"healthy": true, ...}}
+    # breakdown of the components for this camera, taken from the health messages
+    # for example {"detectorapi": {"stage": "idle"}, "detector": {"healthy": true}}
     health_data = models.JSONField(default=dict, blank=True)
 
-    # License status reported on aiaction/.../info/licenses, keyed by
-    # nothing in particular -- it's just the raw entry for this camera
-    # (licensed, status, begin_date, end_date, days_left, last_validation_*).
+    # license info from info/licenses (licensed, status, dates, days_left, ...)
     license_data = models.JSONField(default=dict, blank=True)
 
     active = models.BooleanField(default=True)
 
-    # True for cameras auto-created from an MQTT topic (the device's
-    # ".../cameras" status list) that didn't match any existing camera.
-    # Fully functional either way — this is just a UI flag so a human can
-    # confirm it / give it a nicer name.
+    # True for cameras created automatically from mqtt, a person can confirm them or rename them
     pending_review = models.BooleanField(default=False)
 
     class Meta:
@@ -75,5 +64,6 @@ class Camera(TimeStampedModel):
             ),
         ]
 
+    # returns the camera name
     def __str__(self):
         return f"{self.name} ({self.camera_identifier}/ch{self.channel})"

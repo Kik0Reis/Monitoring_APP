@@ -1,16 +1,4 @@
-"""
-Tests for the device health monitoring service.
-
-These tests verify the business rules for MQTT health messages.
-
-They do NOT require:
-- EMQX
-- an MQTT broker
-- a network connection
-
-They use Django's test database to verify that the monitoring service
-correctly updates Device, DeviceHeartbeat, and DeviceAlert records.
-"""
+# tests for the heartbeat monitoring, device health and detection retention
 
 from datetime import timedelta
 
@@ -38,27 +26,11 @@ from monitoring.services.heartbeat_monitor import (
 )
 
 
+# tests for the camera heartbeat timeout and offline detection
 class CameraHeartbeatTimeoutTests(TestCase):
-    """
-    Tests for camera heartbeat timeout/offline detection.
-    """
-
+    # creates the records used by the tests
     @classmethod
     def setUpTestData(cls):
-        """
-        Create the hierarchy required by Camera.
-
-        Country
-            ↓
-        Customer
-            ↓
-        Location
-            ↓
-        Edge Device
-            ↓
-        Camera
-        """
-
         cls.country = Country.objects.create(name="Portugal", code="PT")
 
         cls.customer = Customer.objects.create(country=cls.country, name="aitecserv")
@@ -82,14 +54,9 @@ class CameraHeartbeatTimeoutTests(TestCase):
             status=CameraStatus.ONLINE,
         )
 
-    # Camera is still healthy
 
+    # camera remains online within timeout
     def test_camera_remains_online_within_timeout(self):
-        """
-        A camera remains ONLINE when its last communication is still
-        inside the allowed timeout window.
-        """
-
         now = timezone.now()
 
         self.camera.last_seen = now - timedelta(seconds=30)
@@ -102,14 +69,9 @@ class CameraHeartbeatTimeoutTests(TestCase):
 
         self.assertEqual(self.camera.status, CameraStatus.ONLINE)
 
-    # Camera becomes offline
 
+    # camera becomes offline after timeout
     def test_camera_becomes_offline_after_timeout(self):
-        """
-        A camera becomes OFFLINE when its heartbeat has expired, and a
-        CAMERA_OFFLINE alert is raised so it shows up on the dashboard.
-        """
-
         now = timezone.now()
 
         self.camera.last_seen = now - timedelta(seconds=61)
@@ -130,13 +92,8 @@ class CameraHeartbeatTimeoutTests(TestCase):
             ).exists()
         )
 
+    # camera offline alert resolves when camera comes back
     def test_camera_offline_alert_resolves_when_camera_comes_back(self):
-        """
-        Once a camera reports in again (any status update to ONLINE), the
-        CAMERA_OFFLINE alert raised while it was down should auto-resolve
-        — mirroring how DEVICE_OFFLINE already works for Edge devices.
-        """
-
         now = timezone.now()
 
         self.camera.last_seen = now - timedelta(seconds=61)
@@ -156,13 +113,9 @@ class CameraHeartbeatTimeoutTests(TestCase):
             ).exists()
         )
 
-    # Never-seen camera
 
+    # camera without last seen remains unknown
     def test_camera_without_last_seen_remains_unknown(self):
-        """
-        A camera that has never communicated remains UNKNOWN.
-        """
-
         self.camera.status = CameraStatus.UNKNOWN
         self.camera.last_seen = None
 
@@ -174,16 +127,9 @@ class CameraHeartbeatTimeoutTests(TestCase):
 
         self.assertEqual(self.camera.status, CameraStatus.UNKNOWN)
 
-    # Camera timeout does not change Edge status
 
+    # camera timeout does not change device status
     def test_camera_timeout_does_not_change_device_status(self):
-        """
-        A camera becoming OFFLINE does not automatically make its
-        Edge device OFFLINE.
-
-        The Edge device has its own heartbeat.
-        """
-
         now = timezone.now()
 
         self.device.status = DeviceStatus.ONLINE
@@ -204,22 +150,17 @@ class CameraHeartbeatTimeoutTests(TestCase):
 
         self.assertEqual(self.device.status, DeviceStatus.ONLINE)
 
-    # Combined heartbeat monitor
 
+    # check all heartbeats checks devices and cameras
     def test_check_all_heartbeats_checks_devices_and_cameras(self):
-        """
-        The combined heartbeat monitor checks both Edge devices
-        and cameras.
-        """
-
         now = timezone.now()
 
-        # Edge device is healthy.
+        # edge device is healthy
         self.device.last_seen = now
 
         self.device.save(update_fields=["last_seen"])
 
-        # Camera has timed out.
+        # camera has timed out
         self.camera.last_seen = now - timedelta(seconds=61)
 
         self.camera.save(update_fields=["last_seen"])
@@ -229,38 +170,24 @@ class CameraHeartbeatTimeoutTests(TestCase):
         self.device.refresh_from_db()
         self.camera.refresh_from_db()
 
-        # Device remains online.
+        # device remains online
         self.assertEqual(self.device.status, DeviceStatus.ONLINE)
 
-        # Camera becomes offline.
+        # camera becomes offline
         self.assertEqual(self.camera.status, CameraStatus.OFFLINE)
 
-        # Combined result should report one offline camera
-        # and zero offline devices.
+        # combined result should report one offline camera
+        # and zero offline devices
         self.assertEqual(result["devices_offline"], 0)
 
         self.assertEqual(result["cameras_offline"], 1)
 
 
+# tests for process_overall_health and the component health alerts
 class DeviceHealthServiceTests(TestCase):
-    """
-    Tests for process_overall_health().
-    """
-
+    # creates the records used by the tests
     @classmethod
     def setUpTestData(cls):
-        """
-        Create the hierarchy required by Device.
-
-        Country
-            ↓
-        Customer
-            ↓
-        Location
-            ↓
-        Device
-        """
-
         cls.country = Country.objects.create(name="Portugal", code="PT")
 
         cls.customer = Customer.objects.create(country=cls.country, name="aitecserv")
@@ -276,14 +203,10 @@ class DeviceHealthServiceTests(TestCase):
             status=DeviceStatus.UNKNOWN,
         )
 
-    # Helper
 
+    # returns a health payload where all components are healthy
     @staticmethod
     def healthy_payload():
-        """
-        Return a health payload where all components are healthy.
-        """
-
         return {
             "timestamp": "2026-07-15T14:30:00Z",
             "source": "aiaction",
@@ -296,18 +219,9 @@ class DeviceHealthServiceTests(TestCase):
             },
         }
 
-    # Test 1
 
+    # all components up marks device online
     def test_all_components_up_marks_device_online(self):
-        """
-        When all components report 'up':
-
-            Device.status = ONLINE
-            Device.last_seen is updated
-            Heartbeat is stored
-            No health alert is created
-        """
-
         received_at = timezone.now()
 
         payload = self.healthy_payload()
@@ -316,46 +230,34 @@ class DeviceHealthServiceTests(TestCase):
             device=self.device, payload=payload, received_at=received_at
         )
 
-        # Refresh the object from the database so we verify the
-        # actual persisted values.
+        # refresh the object from the database so we verify the
+        # actual persisted values
         self.device.refresh_from_db()
 
-        # The device is communicating, therefore it is ONLINE.
+        # the device is communicating, therefore it is ONLINE
         self.assertEqual(self.device.status, DeviceStatus.ONLINE)
 
-        # last_seen should match the MQTT message receive time.
+        # last_seen should match the MQTT message receive time
         self.assertEqual(self.device.last_seen, received_at)
 
-        # One heartbeat should have been stored.
+        # one heartbeat should have been stored
         self.assertEqual(DeviceHeartbeat.objects.filter(device=self.device).count(), 1)
 
-        # No health alert should exist.
+        # no health alert should exist
         self.assertFalse(
             DeviceAlert.objects.filter(
                 device=self.device, alert_type=AlertType.DEVICE_HEALTH, active=True
             ).exists()
         )
 
-    # Test 2
 
+    # unhealthy component keeps device online and creates alert
     def test_unhealthy_component_keeps_device_online_and_creates_alert(self):
-        """
-        When one internal component is down:
-
-            Device.status = ONLINE
-            Device.last_seen is updated
-            Heartbeat is stored
-            DEVICE_HEALTH alert is created
-
-        The device remains ONLINE because it successfully sent
-        the health message.
-        """
-
         received_at = timezone.now()
 
         payload = self.healthy_payload()
 
-        # Simulate the detector becoming unhealthy.
+        # simulate the detector becoming unhealthy
         payload["components"]["detector"]["status"] = "down"
 
         process_overall_health(
@@ -364,42 +266,32 @@ class DeviceHealthServiceTests(TestCase):
 
         self.device.refresh_from_db()
 
-        # The device itself is still communicating.
+        # the device itself is still communicating
         self.assertEqual(self.device.status, DeviceStatus.ONLINE)
 
-        # last_seen must still be updated.
+        # last_seen must still be updated
         self.assertEqual(self.device.last_seen, received_at)
 
-        # The heartbeat must be stored.
+        # the heartbeat must be stored
         self.assertEqual(DeviceHeartbeat.objects.filter(device=self.device).count(), 1)
 
-        # A health alert must be created.
+        # A health alert must be created
         alert = DeviceAlert.objects.get(
             device=self.device, alert_type=AlertType.DEVICE_HEALTH, active=True
         )
 
         self.assertEqual(alert.severity, AlertSeverity.WARNING)
 
-        # The alert should identify the unhealthy component.
+        # the alert should identify the unhealthy component
         self.assertIn("detector", alert.message)
 
-        # The original MQTT payload should be preserved.
+        # the original MQTT payload should be preserved
         self.assertEqual(alert.raw_payload, payload)
 
-    # Test 3
 
+    # component recovery resolves health alert
     def test_component_recovery_resolves_health_alert(self):
-        """
-        When an unhealthy component recovers:
-
-            Device.status = ONLINE
-            Existing health alert becomes inactive
-            resolved_at is populated
-        """
-
-        # --------------------------------------------------------------
-        # First message: detector is DOWN.
-        # --------------------------------------------------------------
+        # first message: detector is DOWN
 
         unhealthy_payload = self.healthy_payload()
 
@@ -407,7 +299,7 @@ class DeviceHealthServiceTests(TestCase):
 
         process_overall_health(device=self.device, payload=unhealthy_payload)
 
-        # Verify that the alert was created.
+        # verify that the alert was created
         alert = DeviceAlert.objects.get(
             device=self.device, alert_type=AlertType.DEVICE_HEALTH, active=True
         )
@@ -415,9 +307,7 @@ class DeviceHealthServiceTests(TestCase):
         self.assertTrue(alert.active)
         self.assertIsNone(alert.resolved_at)
 
-        # --------------------------------------------------------------
-        # Second message: detector has recovered.
-        # --------------------------------------------------------------
+        # second message: detector has recovered
 
         healthy_payload = self.healthy_payload()
 
@@ -425,20 +315,19 @@ class DeviceHealthServiceTests(TestCase):
 
         self.device.refresh_from_db()
 
-        # Device remains ONLINE.
+        # device remains ONLINE
         self.assertEqual(self.device.status, DeviceStatus.ONLINE)
 
-        # The previous alert should now be resolved.
+        # the previous alert should now be resolved
         alert.refresh_from_db()
 
         self.assertFalse(alert.active)
 
         self.assertIsNotNone(alert.resolved_at)
 
-        # There should still only be one health alert.
-        #
-        # We are resolving the existing alert instead of creating
-        # another alert for the recovery.
+        # there should still only be one health alert
+        # we are resolving the existing alert instead of creating
+        # another alert for the recovery
         self.assertEqual(
             DeviceAlert.objects.filter(
                 device=self.device, alert_type=AlertType.DEVICE_HEALTH
@@ -447,17 +336,11 @@ class DeviceHealthServiceTests(TestCase):
         )
 
 
+# tests for the device heartbeat timeout and offline detection
 class HeartbeatTimeoutTests(TestCase):
-    """
-    Tests for heartbeat timeout/offline detection.
-    """
-
+    # creates the records used by the tests
     @classmethod
     def setUpTestData(cls):
-        """
-        Create the hierarchy required by Device.
-        """
-
         cls.country = Country.objects.create(name="Portugal", code="PT")
 
         cls.customer = Customer.objects.create(country=cls.country, name="aitecserv")
@@ -473,14 +356,9 @@ class HeartbeatTimeoutTests(TestCase):
             status=DeviceStatus.ONLINE,
         )
 
-    # Device is still healthy
 
+    # device remains online within timeout
     def test_device_remains_online_within_timeout(self):
-        """
-        A device remains ONLINE when its last heartbeat is still
-        inside the allowed timeout window.
-        """
-
         now = timezone.now()
 
         self.device.last_seen = now - timedelta(seconds=30)
@@ -499,13 +377,9 @@ class HeartbeatTimeoutTests(TestCase):
             ).exists()
         )
 
-    # Device becomes offline
 
+    # device becomes offline after timeout
     def test_device_becomes_offline_after_timeout(self):
-        """
-        A device becomes OFFLINE when its heartbeat has expired.
-        """
-
         now = timezone.now()
 
         self.device.last_seen = now - timedelta(seconds=61)
@@ -516,10 +390,10 @@ class HeartbeatTimeoutTests(TestCase):
 
         self.device.refresh_from_db()
 
-        # Device should now be offline.
+        # device should now be offline
         self.assertEqual(self.device.status, DeviceStatus.OFFLINE)
 
-        # An offline alert should exist.
+        # an offline alert should exist
         alert = DeviceAlert.objects.get(
             device=self.device, alert_type=AlertType.DEVICE_OFFLINE, active=True
         )
@@ -528,24 +402,19 @@ class HeartbeatTimeoutTests(TestCase):
 
         self.assertIn("offline", alert.message.lower())
 
-    # Offline alert is not duplicated
 
+    # offline alert is not duplicated
     def test_offline_alert_is_not_duplicated(self):
-        """
-        Repeated timeout checks must not create duplicate active
-        offline alerts.
-        """
-
         now = timezone.now()
 
         self.device.last_seen = now - timedelta(seconds=61)
 
         self.device.save(update_fields=["last_seen"])
 
-        # First timeout check.
+        # first timeout check
         check_device_timeout(device=self.device, timeout_seconds=60, now=now)
 
-        # Second timeout check.
+        # second timeout check
         check_device_timeout(device=self.device, timeout_seconds=60, now=now)
 
         active_alerts = DeviceAlert.objects.filter(
@@ -554,15 +423,9 @@ class HeartbeatTimeoutTests(TestCase):
 
         self.assertEqual(active_alerts.count(), 1)
 
-    # Never-seen device remains UNKNOWN
 
+    # device without last seen remains unknown
     def test_device_without_last_seen_remains_unknown(self):
-        """
-        A device that has never communicated remains UNKNOWN.
-
-        We don't have enough information to say that it is offline.
-        """
-
         self.device.status = DeviceStatus.UNKNOWN
         self.device.last_seen = None
 
@@ -581,14 +444,9 @@ class HeartbeatTimeoutTests(TestCase):
         )
 
 
+# tests for the stale alert cleanup and the detection retention
 class RetentionServiceTests(TestCase):
-    """
-    Tests for monitoring/services/retention.py's stale-alert auto-resolve
-    and detection retention -- these guard the exact behaviour requested:
-    an error alert or detection no longer being reported on MQTT should
-    not stay "active"/visible forever.
-    """
-
+    # creates the records used by the tests
     @classmethod
     def setUpTestData(cls):
         cls.country = Country.objects.create(name="Portugal", code="PT")
@@ -612,6 +470,7 @@ class RetentionServiceTests(TestCase):
             status=CameraStatus.ONLINE,
         )
 
+    # create device issue alert bumps last seen on reuse
     def test_create_device_issue_alert_bumps_last_seen_on_reuse(self):
         from monitoring.services.device_health import create_device_issue_alert
 
@@ -621,8 +480,8 @@ class RetentionServiceTests(TestCase):
         alert.last_seen_at = timezone.now() - timedelta(hours=10)
         alert.save(update_fields=["last_seen_at"])
 
-        # Same issue reported again -- must reuse the row (not duplicate
-        # it) and refresh last_seen_at.
+        # same issue reported again -- must reuse the row (not duplicate
+        # it) and refresh last_seen_at
         reused = create_device_issue_alert(
             device=self.device, issue_name="disk_full", payload={}
         )
@@ -637,6 +496,7 @@ class RetentionServiceTests(TestCase):
         reused.refresh_from_db()
         self.assertGreater(reused.last_seen_at, timezone.now() - timedelta(minutes=1))
 
+    # resolve stale alerts resolves alert not reseen on mqtt
     def test_resolve_stale_alerts_resolves_alert_not_reseen_on_mqtt(self):
         from monitoring.services.device_health import create_device_issue_alert
         from monitoring.services.retention import resolve_stale_alerts
@@ -650,7 +510,7 @@ class RetentionServiceTests(TestCase):
         fresh_alert = create_device_issue_alert(
             device=self.device, issue_name="high_temp", payload={}
         )
-        # last_seen_at defaults to now() -- still well within 24h.
+        # last_seen_at defaults to now() -- still well within 24h
 
         resolved_count = resolve_stale_alerts(stale_after_hours=24)
 
@@ -663,13 +523,8 @@ class RetentionServiceTests(TestCase):
         fresh_alert.refresh_from_db()
         self.assertTrue(fresh_alert.active)
 
+    # resolve stale alerts does not touch offline alerts
     def test_resolve_stale_alerts_does_not_touch_offline_alerts(self):
-        """
-        A device that is still genuinely offline must not be auto-resolved
-        just because time passed -- only issue-style alerts (DEVICE_ERROR/
-        CAMERA_ERROR) are eligible for time-based staleness.
-        """
-
         from monitoring.services.device_health import create_offline_alert
         from monitoring.services.retention import resolve_stale_alerts
 
@@ -683,13 +538,8 @@ class RetentionServiceTests(TestCase):
         offline_alert.refresh_from_db()
         self.assertTrue(offline_alert.active)
 
+    # detection creates a new row every time
     def test_detection_creates_a_new_row_every_time(self):
-        """
-        Regression test: detections used to dedupe onto a single active
-        CameraAlert row (like problem alerts do), so repeated detections
-        silently overwrote each other instead of building a history.
-        """
-
         from monitoring.services.camera_monitor import process_camera_detection
 
         process_camera_detection(
@@ -708,6 +558,7 @@ class RetentionServiceTests(TestCase):
             2,
         )
 
+    # delete old detections removes only old rows
     def test_delete_old_detections_removes_only_old_rows(self):
         from monitoring.services.retention import delete_old_detections
 
@@ -734,8 +585,9 @@ class RetentionServiceTests(TestCase):
         self.assertFalse(CameraAlert.objects.filter(id=old.id).exists())
         self.assertTrue(CameraAlert.objects.filter(id=recent.id).exists())
 
+    # get camera detections excludes rows past retention window
     def test_get_camera_detections_excludes_rows_past_retention_window(self):
-        from monitoring.services.dashboard import get_camera_detections
+        from monitoring.services.alert_lists import get_camera_detections
 
         old = CameraAlert.objects.create(
             camera=self.camera,

@@ -1,14 +1,8 @@
 import { useState } from "react";
 import { ChevronDown } from "lucide-react";
 
-/**
- * A <section className="detail-section"> whose body is hidden behind a
- * clickable header (a "box" the user clicks to drop down the full
- * content), used to keep the Device/Camera detail pages compact.
- *
- * Uncontrolled by default (defaultOpen), but can be driven by the parent
- * via open/onToggle when it needs to react to the open state itself.
- */
+// a detail section whose body opens and closes when the header is clicked
+// it controls itself, or the parent can control it with open and onToggle
 function CollapsibleSection({
   title,
   count,
@@ -23,6 +17,7 @@ function CollapsibleSection({
   const isControlled = controlledOpen !== undefined;
   const isOpen = isControlled ? controlledOpen : internalOpen;
 
+  // opens or closes the section
   function toggle() {
     if (isControlled) {
       onToggle?.(!isOpen);
@@ -33,26 +28,16 @@ function CollapsibleSection({
 
   return (
     <section className={`detail-section collapsible-section ${isOpen ? "open" : ""}`}>
-      <button
-        type="button"
-        className="collapsible-section-header"
-        onClick={toggle}
-        aria-expanded={isOpen}
-      >
+      <button type="button" className="collapsible-section-header" onClick={toggle} aria-expanded={isOpen}>
         <span className="collapsible-section-title">
           <ChevronDown size={16} className="collapsible-chevron" />
           <h3>{title}</h3>
-          {typeof count === "number" && (
-            <span className="collapsible-count">{count}</span>
-          )}
+          {typeof count === "number" && <span className="collapsible-count">{count}</span>}
           {badge}
         </span>
 
         {actions && (
-          <span
-            className="collapsible-section-actions"
-            onClick={(event) => event.stopPropagation()}
-          >
+          <span className="collapsible-section-actions" onClick={(event) => event.stopPropagation()}>
             {actions}
           </span>
         )}

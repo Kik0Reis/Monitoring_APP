@@ -1,32 +1,24 @@
 from rest_framework import serializers
 
+from core.breadcrumbs import customer_breadcrumb
+from core.serializer_helpers import annotated_count, clean_name
 from countries.models import Country
 from countries.serializers import CountrySummarySerializer
 
 from .models import Customer
 
 
+# validates and converts customer records for the api
 class CustomerSerializer(serializers.ModelSerializer):
-    """Validates and (de)serializes Customer records for the API."""
-
-    # Nested country information returned in responses.
     country = CountrySummarySerializer(read_only=True)
-
-    # Country ID used when creating or updating a customer.
     country_id = serializers.PrimaryKeyRelatedField(
         queryset=Country.objects.all(), source="country", write_only=True
     )
-
-    # Number of locations that belong to this customer.
     locations_count = serializers.SerializerMethodField()
-
-    # Breadcrumb trail used by the frontend to render drilldown
-    # navigation (Country -> Customer) without extra API calls.
     breadcrumb = serializers.SerializerMethodField()
 
     class Meta:
         model = Customer
-
         fields = (
             "id",
             "country",
@@ -40,54 +32,27 @@ class CustomerSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         )
-
         read_only_fields = ("id", "pending_review", "created_at", "updated_at")
 
+    # returns how many locations belong to the customer
     def get_locations_count(self, obj):
-        annotated = getattr(obj, "locations_count_annotation", None)
+        return annotated_count(obj, "locations_count_annotation", "locations")
 
-        if annotated is not None:
-            return annotated
-
-        return obj.locations.count()
-
+    # returns the navigation trail country > customer
     def get_breadcrumb(self, obj):
-        return [
-            {
-                "type": "country",
-                "id": obj.country_id,
-                "name": obj.country.name,
-                "path": f"/countries/{obj.country_id}",
-            },
-            {
-                "type": "customer",
-                "id": obj.id,
-                "name": obj.name,
-                "path": f"/clients/{obj.id}",
-            },
-        ]
+        return customer_breadcrumb(obj)
 
+    # trims the name and requires at least 2 characters
     def validate_name(self, value):
-        """Trim whitespace and require at least 2 characters."""
+        return clean_name(value, "Customer name")
 
-        value = value.strip()
-
-        if len(value) < 2:
-            raise serializers.ValidationError(
-                "Customer name must contain at least 2 characters."
-            )
-
-        return value
-
+    # trims the description
     def validate_description(self, value):
-        """Trim whitespace from the description."""
-
         return value.strip()
 
 
+# minimal customer fields to nest inside other serializers
 class CustomerSummarySerializer(serializers.ModelSerializer):
-    """Minimal Customer fields, for nesting inside other serializers."""
-
     class Meta:
         model = Customer
         fields = ("id", "name")

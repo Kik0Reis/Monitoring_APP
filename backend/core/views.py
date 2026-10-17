@@ -1,10 +1,12 @@
+# api to read and change the settings stored in the .env file
+
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from core.env_settings import read_env, write_env
 from core.serializers import AppSettingsSerializer
 
-# Maps the API field name to the .env key it reads/writes.
+# maps each api field name to the .env key it is stored in
 ENV_KEYS = {
     "mqtt_host": "MQTT_HOST",
     "mqtt_port": "MQTT_PORT",
@@ -39,9 +41,8 @@ INT_FIELDS = {
 BOOL_FIELDS = {"mqtt_tls"}
 
 
+# reads the .env file and returns it with the api field names and types
 def _current_settings() -> dict:
-    """Read backend/.env and shape it into the API's field names/types."""
-
     raw = read_env()
     data = {}
 
@@ -58,36 +59,24 @@ def _current_settings() -> dict:
 
         data[field] = value
 
-    data["mqtt_username"] = raw.get("MQTT_USERNAME", "")
-    # Never return the password itself -- only whether one is set.
+    # never return the password, only whether one is set
     data["mqtt_password_set"] = bool(raw.get("MQTT_PASSWORD"))
 
     return data
 
 
+# GET /api/settings/ returns the settings and PUT /api/settings/ saves them in the .env file
 class SettingsView(APIView):
-    """
-    Reads and writes backend/.env directly (see core/env_settings.py).
-    This is the ONLY place this runtime configuration lives -- there is
-    no parallel settings table, and the .env file remains the single
-    source of truth. Containers read these values at startup, so most
-    changes here require restarting the relevant container to apply.
-
-    Endpoint:
-
-        GET /api/settings/
-        PUT /api/settings/
-    """
-
+    # returns the current settings
     def get(self, request):
         return Response(_current_settings())
 
+    # validates the new settings and writes them to the .env file
     def put(self, request):
         current = _current_settings()
 
         payload = dict(request.data)
-        # Write-only / read-only fields never get merged back into the
-        # "current" snapshot used for validation.
+        # the password and mqtt_password_set are not part of the saved settings used for validation
         password = payload.pop("mqtt_password", None)
         payload.pop("mqtt_password_set", None)
 
@@ -107,7 +96,7 @@ class SettingsView(APIView):
 
             updates[env_key] = value
 
-        # Blank/omitted password means "don't change it".
+        # an empty or missing password keeps the current one
         if password:
             updates["MQTT_PASSWORD"] = password
 

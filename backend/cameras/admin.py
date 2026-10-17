@@ -3,6 +3,7 @@ from django.contrib import admin
 from .models import Camera
 
 
+# admin page of the cameras
 @admin.register(Camera)
 class CameraAdmin(admin.ModelAdmin):
     list_display = (

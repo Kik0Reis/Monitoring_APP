@@ -1,34 +1,71 @@
 import { useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
-import {
-  LayoutDashboard,
-  LayoutList,
-  Cpu,
-  Camera,
-  Bell,
-  Settings,
-  ChevronDown,
-} from "lucide-react";
+import { Bell, Camera, ChevronDown, Cpu, LayoutDashboard, LayoutList, Settings } from "lucide-react";
 
-// "Monitor" groups the tree view together with the flat Devices/Cameras
-// lists -- Countries/Clients/Locations still exist as their own pages
-// (linked to from the tree and from breadcrumbs), they just don't get a
-// top-level sidebar entry of their own anymore.
-const MONITOR_ITEMS = [
-  { label: "Views", path: "/monitor/views", icon: LayoutList },
-  { label: "Devices", path: "/devices", icon: Cpu },
-  { label: "Cameras", path: "/cameras", icon: Camera },
+// the sidebar menu, an item with children is an expandable group
+// Countries, Clients and Locations have no entry here, they are reached from the tree and the breadcrumbs
+const NAV_ITEMS = [
+  { label: "Dashboard", path: "/dashboard", icon: LayoutDashboard },
+  {
+    label: "Monitor",
+    icon: LayoutList,
+    children: [
+      { label: "Views", path: "/monitor/views", icon: LayoutList },
+      { label: "Devices", path: "/devices", icon: Cpu },
+      { label: "Cameras", path: "/cameras", icon: Camera },
+    ],
+  },
+  { label: "Alerts", path: "/alerts", icon: Bell },
+  { label: "Settings", path: "/settings", icon: Settings },
 ];
 
-function Sidebar() {
-  const location = useLocation();
+// builds the class of a sidebar link from the active state of the router
+function linkClass(extra) {
+  return ({ isActive }) => `sidebar-link ${extra} ${isActive ? "active" : ""}`;
+}
 
-  const monitorActive = MONITOR_ITEMS.some((item) =>
-    location.pathname.startsWith(item.path)
+// a single link of the menu
+function SidebarLink({ item, sub = false }) {
+  return (
+    <NavLink to={item.path} className={linkClass(sub ? "sidebar-sublink" : "")}>
+      <item.icon className="sidebar-link-icon" size={sub ? 16 : 18} strokeWidth={2} />
+      <span>{item.label}</span>
+    </NavLink>
   );
+}
 
-  const [monitorOpen, setMonitorOpen] = useState(monitorActive);
+// an expandable group of links, it starts open when one of its pages is the current page
+function SidebarGroup({ item }) {
+  const location = useLocation();
+  const groupActive = item.children.some((child) => location.pathname.startsWith(child.path));
+  const [open, setOpen] = useState(groupActive);
 
+  return (
+    <>
+      <button
+        type="button"
+        className={`sidebar-link sidebar-group-toggle ${groupActive ? "active" : ""}`}
+        onClick={() => setOpen((isOpen) => !isOpen)}
+        aria-expanded={open}
+      >
+        <item.icon className="sidebar-link-icon" size={18} strokeWidth={2} />
+        <span>{item.label}</span>
+        <ChevronDown className={`sidebar-group-chevron ${open ? "open" : ""}`} size={16} strokeWidth={2} />
+      </button>
+
+      {open && (
+        <div className="sidebar-group">
+          {item.children.map((child) => (
+            <SidebarLink key={child.path} item={child} sub />
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
+// the left menu of the app
+function Sidebar() {
   return (
     <aside className="sidebar">
       <div className="sidebar-logo">
@@ -36,61 +73,9 @@ function Sidebar() {
       </div>
 
       <nav className="sidebar-nav">
-        <NavLink
-          to="/dashboard"
-          className={({ isActive }) => `sidebar-link ${isActive ? "active" : ""}`}
-        >
-          <LayoutDashboard className="sidebar-link-icon" size={18} strokeWidth={2} />
-          <span>Dashboard</span>
-        </NavLink>
-
-        <button
-          type="button"
-          className={`sidebar-link sidebar-group-toggle ${monitorActive ? "active" : ""}`}
-          onClick={() => setMonitorOpen((open) => !open)}
-          aria-expanded={monitorOpen}
-        >
-          <LayoutList className="sidebar-link-icon" size={18} strokeWidth={2} />
-          <span>Monitor</span>
-          <ChevronDown
-            className={`sidebar-group-chevron ${monitorOpen ? "open" : ""}`}
-            size={16}
-            strokeWidth={2}
-          />
-        </button>
-
-        {monitorOpen && (
-          <div className="sidebar-group">
-            {MONITOR_ITEMS.map((item) => (
-              <NavLink
-                key={item.path}
-                to={item.path}
-                className={({ isActive }) =>
-                  `sidebar-link sidebar-sublink ${isActive ? "active" : ""}`
-                }
-              >
-                <item.icon className="sidebar-link-icon" size={16} strokeWidth={2} />
-                <span>{item.label}</span>
-              </NavLink>
-            ))}
-          </div>
+        {NAV_ITEMS.map((item) =>
+          item.children ? <SidebarGroup key={item.label} item={item} /> : <SidebarLink key={item.path} item={item} />
         )}
-
-        <NavLink
-          to="/alerts"
-          className={({ isActive }) => `sidebar-link ${isActive ? "active" : ""}`}
-        >
-          <Bell className="sidebar-link-icon" size={18} strokeWidth={2} />
-          <span>Alerts</span>
-        </NavLink>
-
-        <NavLink
-          to="/settings"
-          className={({ isActive }) => `sidebar-link ${isActive ? "active" : ""}`}
-        >
-          <Settings className="sidebar-link-icon" size={18} strokeWidth={2} />
-          <span>Settings</span>
-        </NavLink>
       </nav>
     </aside>
   );

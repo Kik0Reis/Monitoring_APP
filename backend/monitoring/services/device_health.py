@@ -1,9 +1,4 @@
-"""Device status/health processing: online-offline-unknown + internal components.
-
-Device.status is only ever ONLINE/OFFLINE/UNKNOWN. Internal components
-(detectorapi, detector, idmr, ...) have their own status strings like "up"
-or "down" -- those must never leak into Device.status.
-"""
+# updates the status, heartbeats, components and alerts of a device from its mqtt messages
 
 import logging
 from typing import Any
@@ -23,20 +18,18 @@ from monitoring.models import (
 
 logger = logging.getLogger(__name__)
 
-# component status strings that mean "all good", everything else counts as unhealthy
+# component status strings that mean everything is fine, anything else is unhealthy
 HEALTHY_COMPONENT_STATUSES = {"up", "online", "healthy"}
 
 
+# returns True when a component status string means the component is fine
 def is_component_healthy(status: str) -> bool:
-    """True if a component's reported status string means it's fine."""
-
     return str(status).lower() in HEALTHY_COMPONENT_STATUSES
 
 
+# sets the device status and logs the change, only when it changed
 @transaction.atomic
 def update_device_status(device: Device, new_status: str) -> Device:
-    """Set a device's status and log the transition, only if it changed."""
-
     if new_status not in DeviceStatus.values:
         raise ValueError(f"Invalid device status: {new_status}")
 
@@ -55,9 +48,8 @@ def update_device_status(device: Device, new_status: str) -> Device:
     return device
 
 
+# marks the device as having just communicated
 def update_last_seen(device: Device, received_at=None) -> Device:
-    """Stamp a device as having just communicated (or at received_at)."""
-
     if received_at is None:
         received_at = timezone.now()
 
@@ -67,12 +59,11 @@ def update_last_seen(device: Device, received_at=None) -> Device:
     return device
 
 
+# saves a heartbeat row and refreshes the last_seen of the device
 @transaction.atomic
 def record_heartbeat(
     device: Device, payload: dict[str, Any], received_at=None
 ) -> DeviceHeartbeat:
-    """Log a heartbeat row and refresh the device's last_seen."""
-
     if received_at is None:
         received_at = timezone.now()
 
@@ -85,20 +76,8 @@ def record_heartbeat(
     return heartbeat
 
 
+# creates a device offline alert, or returns the one already active
 def create_offline_alert(device: Device) -> DeviceAlert:
-    """Raise a DEVICE_OFFLINE alert, reusing the active one if there is one.
-
-    If the most recent DEVICE_OFFLINE alert for this device was manually
-    resolved (see monitoring.views.DeviceAlertResolveView) and the device
-    hasn't actually come back online since, this is still the same
-    ongoing outage -- so instead of raising a brand new active alert
-    (which would make a manual resolve pointless, since the device is
-    still offline on every reconcile pass), this just bumps last_seen_at
-    on the resolved row and leaves it resolved. A real "back online"
-    signal (resolve_offline_alerts) clears manually_resolved_at, so the
-    *next* time it goes offline this raises a fresh alert as normal.
-    """
-
     existing_alert = DeviceAlert.objects.filter(
         device=device, alert_type=AlertType.DEVICE_OFFLINE, active=True
     ).first()
@@ -125,16 +104,8 @@ def create_offline_alert(device: Device) -> DeviceAlert:
     )
 
 
+# closes the active offline alerts of a device
 def resolve_offline_alerts(device: Device) -> int:
-    """Close any active DEVICE_OFFLINE alert for this device.
-
-    Also clears manually_resolved_at on every DEVICE_OFFLINE alert for
-    this device: a real "back online" signal proves whatever comes next
-    is a genuinely new outage, not the same one a human already
-    dismissed, so create_offline_alert() should raise a fresh alert next
-    time rather than staying suppressed forever.
-    """
-
     DeviceAlert.objects.filter(
         device=device,
         alert_type=AlertType.DEVICE_OFFLINE,
@@ -146,15 +117,11 @@ def resolve_offline_alerts(device: Device) -> int:
     ).update(active=False, resolved_at=timezone.now())
 
 
+# stores the status of one internal component (for example detectorapi) on the device
 @transaction.atomic
 def update_component_status(
     device: Device, component_name: str, payload: dict[str, Any]
 ) -> Device:
-    """Store one internal component's status (e.g. detectorapi -> up) on the device.
-
-    Written to Device.component_statuses, never to Device.status.
-    """
-
     if not component_name:
         raise ValueError("Component name cannot be empty.")
 
@@ -170,11 +137,10 @@ def update_component_status(
     return device
 
 
+# creates a health alert naming the unhealthy components, or reuses the active one
 def create_health_alert(
     device: Device, unhealthy_components: list[str], payload: dict[str, Any]
 ) -> DeviceAlert:
-    """Raise a DEVICE_HEALTH alert naming the unhealthy component(s), reusing an active one."""
-
     message = (
         f"Device '{device.name}' has unhealthy components: "
         f"{', '.join(unhealthy_components)}."
@@ -196,14 +162,14 @@ def create_health_alert(
     )
 
 
+# closes the active health alerts of a device
 def resolve_health_alerts(device: Device) -> int:
-    """Close any active DEVICE_HEALTH alert for this device."""
-
     return DeviceAlert.objects.filter(
         device=device, alert_type=AlertType.DEVICE_HEALTH, active=True
     ).update(active=False, resolved_at=timezone.now())
 
 
+# handles a health/<source> mqtt message
 @transaction.atomic
 def process_device_status(
     device: Device,
@@ -212,13 +178,6 @@ def process_device_status(
     payload: dict[str, Any] | None = None,
     received_at=None,
 ) -> Device:
-    """Process a health/{source} MQTT message.
-
-    source="edge-device" is the Edge's actual MQTT connection/LWT status
-    (online/offline/unknown). Anything else is an internal component
-    (detectorapi, detector, idmr, ...) and never touches Device.status.
-    """
-
     if received_at is None:
         received_at = timezone.now()
 
@@ -243,7 +202,7 @@ def process_device_status(
 
         raise ValueError(f"Invalid Edge status: {status}")
 
-    # everything below here is an internal component (detectorapi, detector, idmr, ...)
+    # everything below is an internal component (detectorapi, detector, idmr, ...)
     component_payload = dict(payload or {})
     component_payload.setdefault("status", status)
 
@@ -251,15 +210,14 @@ def process_device_status(
         device=device, component_name=source or "unknown", payload=component_payload
     )
 
-    # pull this component's per-camera breakdown (if any) onto the relevant Camera
+    # copy the per-camera breakdown of this component to the matching cameras
     from monitoring.services.camera_monitor import update_camera_component_health
 
     update_camera_component_health(
         device=device, source=source or "unknown", component_payload=component_payload
     )
 
-    # a component report is still communication from the Edge, so it counts
-    # as the device being online too
+    # a component report is also a sign of life, so the device is online
     update_last_seen(device=device, received_at=received_at)
     update_device_status(device=device, new_status=DeviceStatus.ONLINE)
     resolve_offline_alerts(device)
@@ -271,15 +229,14 @@ def process_device_status(
             payload=component_payload,
         )
     else:
-        # a component just came back healthy, re-check whether all of them are now
+        # a component came back healthy, check if all of them are healthy now
         process_component_health_alerts(device=device)
 
     return device
 
 
+# checks every known component and creates or resolves the health alert
 def process_component_health_alerts(device: Device) -> None:
-    """Re-check every known component and raise/resolve the health alert accordingly."""
-
     component_statuses = device.component_statuses or {}
     unhealthy_components = []
 
@@ -302,16 +259,9 @@ def process_component_health_alerts(device: Device) -> None:
         resolve_health_alerts(device)
 
 
+# handles the info/edge-device message with the hardware and system info
 @transaction.atomic
 def process_device_info(device: Device, payload: dict[str, Any], received_at=None) -> Device:
-    """Process aiaction/.../info/edge-device: hardware/system info (OS, CPU, RAM, GPU, IP...).
-
-    Stored as-is in Device.system_info. Its device_id is a real, stable
-    hardware identifier, so while the device is still pending_review this
-    swaps out the auto-generated "AUTO-..." serial number for it. Never
-    touches name/serial_number once a human has confirmed the device.
-    """
-
     if received_at is None:
         received_at = timezone.now()
 
@@ -327,8 +277,7 @@ def process_device_info(device: Device, payload: dict[str, Any], received_at=Non
     try:
         device.save(update_fields=update_fields)
     except IntegrityError:
-        # another device already has this serial number, keep the placeholder
-        # instead of crashing MQTT processing
+        # another device already has this serial number, keep the placeholder instead of failing
         logger.warning(
             "Could not set serial number '%s' on device %s from MQTT info: "
             "already in use by another device.",
@@ -347,27 +296,10 @@ def process_device_info(device: Device, payload: dict[str, Any], received_at=Non
     return device
 
 
+# creates an error alert for a named issue, or reuses the active one
 def create_device_issue_alert(
     device: Device, issue_name: str, payload: dict[str, Any]
 ) -> DeviceAlert:
-    """Raise a DEVICE_ERROR alert for a named issue, reusing the active alert for it if one exists.
-
-    Bumps last_seen_at on reuse -- this is how resolve_stale_alerts()
-    (monitoring/services/retention.py) later knows the issue is still
-    being reported, vs. having simply stopped without an explicit
-    "resolved" message.
-
-    If the most recent alert for this exact issue_name was manually
-    resolved (see monitoring.views.DeviceAlertResolveView) and it's still
-    within settings.ALERT_STALE_HOURS of last being reported, this is
-    still the same occurrence -- same reasoning as create_offline_alert,
-    a manual resolve would otherwise be undone by the very next MQTT
-    message repeating the same issue. There's no explicit "issue cleared"
-    signal for DEVICE_ERROR (unlike offline/health), so a gap longer than
-    ALERT_STALE_HOURS between reports is what counts as "this stopped and
-    came back", raising a fresh alert instead.
-    """
-
     existing_alerts = DeviceAlert.objects.filter(
         device=device, alert_type=AlertType.DEVICE_ERROR, active=True
     )
@@ -415,12 +347,11 @@ def create_device_issue_alert(
     )
 
 
+# handles an issues/<name> message, a problem reported by the edge
 @transaction.atomic
 def process_device_issue(
     device: Device, issue_name: str, payload: dict[str, Any], received_at=None
 ) -> DeviceAlert:
-    """Process aiaction/.../issues/{issue_name}: a named problem reported by the Edge."""
-
     if received_at is None:
         received_at = timezone.now()
 
@@ -433,25 +364,12 @@ def process_device_issue(
     return create_device_issue_alert(device=device, issue_name=issue_name, payload=payload)
 
 
+# handles the overall-health snapshot message, the edge-device entry is not shown as a component
 @transaction.atomic
 def process_overall_health(
     device: Device, payload: dict[str, Any], received_at=None
 ) -> DeviceHeartbeat:
-    """Process aiaction/.../health/overall-health: the combined snapshot message.
-
-    Its "components" block nests the Edge's own status and the camera list
-    alongside the usual detectorapi/detector/idmr statuses.
-
-    - "edge-device" is dropped: it's just the online/offline status already
-      shown by the device's status badge, keeping it would just duplicate that.
-    - "cameras" is delegated to process_camera_status_list.
-    - everything else is treated like process_device_status's per-component
-      path, including extracting per-camera breakdowns via
-      camera_monitor.update_camera_component_health.
-    """
-
-    # imported here, not at module level, to keep this one-directional
-    # dependency (camera_monitor doesn't import this module) explicit
+    # imported here to keep the dependency one way, camera_monitor does not import this module
     from monitoring.services.camera_monitor import (
         process_camera_status_list,
         update_camera_component_health,
@@ -462,7 +380,7 @@ def process_overall_health(
 
     heartbeat = record_heartbeat(device=device, payload=payload, received_at=received_at)
 
-    # a snapshot arriving at all proves the Edge is online
+    # receiving a snapshot proves the edge is online
     update_device_status(device=device, new_status=DeviceStatus.ONLINE)
     resolve_offline_alerts(device)
 
@@ -472,7 +390,7 @@ def process_overall_health(
         raw_components = {}
 
     components = dict(raw_components)
-    components.pop("edge-device", None)  # see docstring, never shown as its own component
+    components.pop("edge-device", None)  # the edge-device entry is not shown as its own component
     cameras_component = components.pop("cameras", None)
 
     device.health_data = payload

@@ -1,10 +1,4 @@
-/* ============================================================
-   CrudModal-only styles.
-
-   Form field, crud-detail, and button styles live in
-   src/styles/common.css so a modal on any page looks identical.
-   This file only positions the overlay/dialog/header/footer.
-   ============================================================ */
+/* popup used to add, edit and view records */
 
 .crud-modal-overlay {
   position: fixed;

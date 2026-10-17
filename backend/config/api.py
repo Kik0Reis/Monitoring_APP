@@ -17,7 +17,7 @@ from monitoring.views import (
 
 router = DefaultRouter()
 
-# All the endpoints for the API are registered here. The router will automatically generate the URL patterns for each viewset.
+# api routes, the router creates the list and detail urls of each viewset
 
 router.register("countries", CountryViewSet)
 router.register("customers", CustomerViewSet)
@@ -29,17 +29,13 @@ router.register("cameras", CameraViewSet)
 urlpatterns = [
     *router.urls,
     path("dashboard/", DashboardView.as_view(), name="dashboard"),
-    # Full Country > Customer > Location > Device > Camera tree for the
-    # "Monitor > Views" page, with per-node status/alerts/detections rollup.
+    # tree of country > customer > location > device > camera with the status of each node
     path("monitor/tree/", MonitorTreeView.as_view(), name="monitor-tree"),
-    # Device/camera health & connectivity problems (offline, unhealthy
-    # component, MQTT/system errors, camera errors).
+    # problems of devices and cameras (offline, unhealthy components, errors)
     path("problems/", ProblemsView.as_view(), name="problems"),
-    # Real camera detections reported over MQTT (smoke, person, etc.).
+    # events detected by the cameras
     path("detections/", DetectionsView.as_view(), name="detections"),
-    # Manually mark a DeviceAlert/CameraAlert as resolved (dashboard,
-    # alerts page, device/camera detail pages). Reappears as a fresh
-    # active alert if the same problem is re-reported on MQTT.
+    # marks an alert as resolved, it is created again if the problem is reported again
     path(
         "alerts/device/<int:alert_id>/resolve/",
         DeviceAlertResolveView.as_view(),
@@ -50,6 +46,6 @@ urlpatterns = [
         CameraAlertResolveView.as_view(),
         name="camera-alert-resolve",
     ),
-    # Reads/writes backend/.env directly (see core/env_settings.py).
+    # settings stored in the .env file
     path("settings/", SettingsView.as_view(), name="app-settings"),
 ]

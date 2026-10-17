@@ -1,129 +1,20 @@
-// VITE_API_BASE_URL lets this be set per environment (staging, prod, another
-// dev's machine); falls back to the local backend when unset.
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "/api";
+import { apiRequest } from "./http";
+import { scopeQuery } from "../utils/scope";
 
-async function apiRequest(endpoint, options = {}) {
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-    headers: {
-      "Content-Type": "application/json",
-      ...(options.headers || {}),
-    },
-    ...options,
-  });
+export { fetchAll } from "./http";
 
-  if (!response.ok) {
-    let error = null;
-
-    try {
-      error = await response.json();
-    } catch {
-      // no JSON body, fall through to the generic message below
-    }
-
-    if (error?.detail) {
-      throw new Error(error.detail);
-    }
-
-    if (error?.message) {
-      throw new Error(error.message);
-    }
-
-    // Django serializer validation errors: {field: ["msg", ...]}
-    if (error && typeof error === "object") {
-      const messages = Object.entries(error).flatMap(([field, messages]) => {
-        if (Array.isArray(messages)) {
-          return messages.map((message) => `${field}: ${message}`);
-        }
-
-        return [`${field}: ${messages}`];
-      });
-
-      if (messages.length > 0) {
-        throw new Error(messages.join(" "));
-      }
-    }
-
-    throw new Error("Something went wrong while communicating with the API.");
-  }
-
-  if (response.status === 204) {
-    return null;
-  }
-
-  return response.json();
-}
-
-/**
- * Fetches every page of a paginated list endpoint. Only used to populate
- * dropdowns that need the full option set, not just the first page.
- */
-export async function fetchAll(listFn, params = "") {
-  let url = params;
-  let results = [];
-  let guard = 0;
-
-  while (url !== null && guard < 50) {
-    const data = await listFn(url);
-
-    if (data && Array.isArray(data.results)) {
-      results = results.concat(data.results);
-
-      if (data.next) {
-        const nextUrl = new URL(data.next);
-        url = `?${nextUrl.searchParams.toString()}`;
-      } else {
-        url = null;
-      }
-    } else {
-      results = results.concat(data ?? []);
-      url = null;
-    }
-
-    guard += 1;
-  }
-
-  return results;
-}
-
-/**
- * Standard list/get/create/update/delete for a REST resource, plus
- * "approve" for the ones that carry a pending_review flag (anything
- * that can be auto-provisioned from MQTT).
- */
+// builds list, get, create, update and delete for a rest resource, approve is added for resources created from mqtt
 function makeCrudApi(resourcePath, { approvable = false } = {}) {
   const api = {
-    list(params = "") {
-      return apiRequest(`/${resourcePath}/${params}`);
-    },
-
-    get(id) {
-      return apiRequest(`/${resourcePath}/${id}/`);
-    },
-
-    create(data) {
-      return apiRequest(`/${resourcePath}/`, {
-        method: "POST",
-        body: JSON.stringify(data),
-      });
-    },
-
-    update(id, data) {
-      return apiRequest(`/${resourcePath}/${id}/`, {
-        method: "PUT",
-        body: JSON.stringify(data),
-      });
-    },
-
-    delete(id) {
-      return apiRequest(`/${resourcePath}/${id}/`, {
-        method: "DELETE",
-      });
-    },
+    list: (params = "") => apiRequest(`/${resourcePath}/${params}`),
+    get: (id) => apiRequest(`/${resourcePath}/${id}/`),
+    create: (data) => apiRequest(`/${resourcePath}/`, { method: "POST", body: JSON.stringify(data) }),
+    update: (id, data) => apiRequest(`/${resourcePath}/${id}/`, { method: "PUT", body: JSON.stringify(data) }),
+    delete: (id) => apiRequest(`/${resourcePath}/${id}/`, { method: "DELETE" }),
   };
 
   if (approvable) {
-    api.approve = (id) =>
-      apiRequest(`/${resourcePath}/${id}/approve/`, { method: "POST" });
+    api.approve = (id) => apiRequest(`/${resourcePath}/${id}/approve/`, { method: "POST" });
   }
 
   return api;
@@ -135,71 +26,44 @@ export const locationsApi = makeCrudApi("locations", { approvable: true });
 export const devicesApi = makeCrudApi("devices", { approvable: true });
 export const camerasApi = makeCrudApi("cameras", { approvable: true });
 
-// Device/camera health & connectivity problems (offline, unhealthy
-// component, MQTT/system errors, camera errors). Active-only by default.
+// problems of devices and cameras (offline, unhealthy components, errors)
 export const problemsApi = {
-  list(params = "") {
-    return apiRequest(`/problems/${params}`);
-  },
+  list: (params = "") => apiRequest(`/problems/${params}`),
 };
 
-// Real camera detections reported over MQTT (smoke, person, etc). Plain
-// chronological event log; only "active" ones show (see backend), which
-// is what lets a detection be manually resolved/hidden below.
+// events detected by the cameras
 export const detectionsApi = {
-  list(params = "") {
-    return apiRequest(`/detections/${params}`);
-  },
+  list: (params = "") => apiRequest(`/detections/${params}`),
 };
 
-// Manually resolve a DeviceAlert/CameraAlert (offline alert, error, or
-// detection). Reappears as a fresh alert if the same problem is
-// re-reported over MQTT -- this only silences the current occurrence.
+// manually resolves an alert, it is created again if the problem is reported again
 export const alertsApi = {
-  resolveDevice(id) {
-    return apiRequest(`/alerts/device/${id}/resolve/`, { method: "POST" });
-  },
-  resolveCamera(id) {
-    return apiRequest(`/alerts/camera/${id}/resolve/`, { method: "POST" });
-  },
-  // alert.id from dashboard/problems/detections endpoints looks like
-  // "device-42" or "camera-17" -- this resolves either kind from that
-  // combined id without the caller needing to know which model it is.
+  resolveDevice: (id) => apiRequest(`/alerts/device/${id}/resolve/`, { method: "POST" }),
+  resolveCamera: (id) => apiRequest(`/alerts/camera/${id}/resolve/`, { method: "POST" }),
+
+  // resolves an alert from its combined id, like "device-42" or "camera-17"
   resolveById(compositeId) {
     const [kind, rawId] = String(compositeId).split("-");
+
     if (kind === "device") return this.resolveDevice(rawId);
     if (kind === "camera") return this.resolveCamera(rawId);
+
     return Promise.reject(new Error(`Unknown alert id: ${compositeId}`));
   },
 };
 
-// Country > Customer > Location > Device > Camera tree for the
-// "Monitor > Views" page (see monitoring/services/tree.py for what each
-// node's system_check/has_alerts/detections_count mean).
+// country > customer > location > device > camera tree, with the scope inactive records are hidden or shown
 export const monitorApi = {
-  // activeOnly=true hides inactive customers/locations/devices/cameras and
-  // ignores them in every node's rollup colour (see tree.py).
-  tree({ activeOnly = false } = {}) {
-    return apiRequest(`/monitor/tree/${activeOnly ? "?active_only=true" : ""}`);
-  },
+  tree: ({ scope } = {}) => apiRequest(`/monitor/tree/${scope ? `?${scopeQuery(scope)}` : ""}`),
 };
 
+// everything the dashboard page shows
 export const dashboardApi = {
-  get() {
-    return apiRequest("/dashboard/");
-  },
+  get: ({ scope } = {}) => apiRequest(`/dashboard/${scope ? `?${scopeQuery(scope)}` : ""}`),
 };
 
-// Reads/writes backend/.env directly (see core/env_settings.py on the
-// backend). mqtt_password is write-only: omit it to leave it unchanged.
+// settings stored in the backend .env file, leave mqtt_password out to keep the current one
 export const settingsApi = {
-  get() {
-    return apiRequest("/settings/");
-  },
-  update(data) {
-    return apiRequest("/settings/", {
-      method: "PUT",
-      body: JSON.stringify(data),
-    });
-  },
+  get: () => apiRequest("/settings/"),
+  update: (data) => apiRequest("/settings/", { method: "PUT", body: JSON.stringify(data) }),
 };

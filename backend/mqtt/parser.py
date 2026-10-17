@@ -1,32 +1,20 @@
-"""Turns raw MQTT topic/payload strings into plain dicts. No DB access here."""
+# turns raw mqtt topics and payloads into plain dicts, it never touches the database
 
 import json
 from typing import Any
 
 
+# raised when a topic or payload has an unknown shape
 class MQTTParserError(Exception):
-    """Topic or payload didn't match a known shape."""
+    pass
 
 
+# splits an aiaction topic into its parts and finds the message type
 def parse_topic(topic: str) -> dict[str, Any]:
-    """
-    Break an aiaction/... topic into its parts and classify the message type.
-
-    aiaction/{country}/{client}/{installation}/{device_id}/info/edge-device
-    aiaction/{country}/{client}/{installation}/{device_id}/info/cameras
-    aiaction/{country}/{client}/{installation}/{device_id}/info/licenses
-    aiaction/{country}/{client}/{installation}/{device_id}/health/overall-health
-    aiaction/{country}/{client}/{installation}/{device_id}/health/cameras
-    aiaction/{country}/{client}/{installation}/{device_id}/health/edge-device
-    aiaction/{country}/{client}/{installation}/{device_id}/health/{component}
-    aiaction/{country}/{client}/{installation}/{device_id}/issues/{issue_name}
-    aiaction/{country}/{client}/{installation}/{device_id}/detections/{camera_id}/{channel}
-    """
-
     if not isinstance(topic, str) or not topic.strip():
         raise MQTTParserError("MQTT topic cannot be empty.")
 
-    # publishers sometimes leave a trailing slash on, strip it before splitting
+    # some publishers add a trailing slash, remove it before splitting
     cleaned_topic = topic.strip().rstrip("/")
 
     if not cleaned_topic:
@@ -91,8 +79,7 @@ def parse_topic(topic: str) -> dict[str, Any]:
         if health_topic == "edge-device":
             return {"message_type": "health_edge_device", **base}
 
-        # anything else under health/ is a component reporting its own status
-        # (detectorapi, detector, idmr, whatever gets added later)
+        # any other health topic is a component reporting its own status
         return {"message_type": "health_component", "source": health_topic, **base}
 
     if category == "issues" and len(parts) == 7:
@@ -127,9 +114,8 @@ def parse_topic(topic: str) -> dict[str, Any]:
     raise MQTTParserError(f"Unsupported MQTT topic structure: {topic}")
 
 
+# decodes a payload (bytes, json string or dict) into a dict
 def parse_payload(payload: bytes | str | dict) -> dict[str, Any]:
-    """Decode a payload (bytes, JSON string, or dict) into a dict."""
-
     if isinstance(payload, dict):
         return payload
 
@@ -153,13 +139,8 @@ def parse_payload(payload: bytes | str | dict) -> dict[str, Any]:
     return data
 
 
+# combines the topic and the payload into the dict the service expects
 def parse_mqtt_message(topic: str, payload: bytes | str | dict) -> dict[str, Any]:
-    """
-    Combine parse_topic + parse_payload into the single dict service.py expects.
-    Optional fields (camera_id, channel, source, issue_name) always default to
-    None so callers don't need to check if a key exists.
-    """
-
     parsed_topic = parse_topic(topic)
     parsed_payload = parse_payload(payload)
 

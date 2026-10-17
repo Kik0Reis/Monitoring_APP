@@ -1,17 +1,4 @@
-"""Answers "does the broker still know this device/camera exists?" -- not a timeout check.
-
-That's a different question from OFFLINE status (heartbeat_monitor.py
-handles missed heartbeats). This is for cases like deleting a Country and
-MQTT traffic re-creating some of that tree from scratch -- some records
-may no longer match anything the broker actually retains.
-
-subscriber.py periodically forces the broker to resend every retained
-message (unsubscribe + resubscribe) and records who replies within a
-short window (mqtt/reconcile_state.py). This module closes that window:
-anyone who didn't reply gets on_mqtt=False, pushed OFFLINE, and the usual
-offline alert (reused, not duplicated) so it's safe to confirm and delete.
-Anyone who reappears gets on_mqtt flipped back on automatically.
-"""
+# checks whether the broker still knows each device and camera, this is not a timeout check
 
 import logging
 
@@ -26,20 +13,15 @@ from mqtt import reconcile_state
 logger = logging.getLogger("mqtt")
 
 
+# opens a new reconciliation window just before subscribing
 def start_reconcile_window() -> None:
-    """Open a new reconciliation window (called right before (re)subscribing)."""
-
     reconcile_state.begin_cycle()
     logger.info("MQTT reconciliation window started.")
 
 
+# closes the window and marks the devices and cameras that were not seen
 @transaction.atomic
 def finish_reconcile_window() -> dict:
-    """Close the window and apply it to every active device/camera.
-
-    Returns how many of each were not seen.
-    """
-
     seen_device_ids, seen_camera_ids = reconcile_state.snapshot_and_reset()
 
     missing_devices = 0
@@ -63,7 +45,7 @@ def finish_reconcile_window() -> dict:
         if device.status != DeviceStatus.OFFLINE:
             update_device_status(device=device, new_status=DeviceStatus.OFFLINE)
 
-        # idempotent -- just returns the existing alert if one's already active
+        # returns the existing alert when one is already active
         create_offline_alert(device)
 
     for camera in Camera.objects.filter(active=True):
@@ -81,7 +63,7 @@ def finish_reconcile_window() -> dict:
             camera.on_mqtt = False
             camera.save(update_fields=["on_mqtt", "updated_at"])
 
-        # update_camera_status already raises/reuses the offline alert itself
+        # update_camera_status already creates or reuses the offline alert
         update_camera_status(camera=camera, new_status=CameraStatus.OFFLINE)
 
     logger.info(

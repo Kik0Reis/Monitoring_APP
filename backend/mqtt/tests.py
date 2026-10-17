@@ -1,3 +1,5 @@
+# tests for the mqtt messages that update devices, cameras and alerts
+
 from django.test import TestCase
 
 from cameras.models import Camera, CameraStatus
@@ -9,22 +11,11 @@ from monitoring.models import AlertType, CameraAlert, CameraAlertType, DeviceAle
 from mqtt.service import process_mqtt_message
 
 
+# tests for the mqtt pipeline: parser, service and monitoring
 class MQTTServiceTests(TestCase):
-    """
-    Tests the MQTT parser → service → monitoring pipeline.
-
-    No MQTT broker is required.
-
-    We simulate the exact MQTT topics and payloads that EMQX would
-    deliver to the application.
-    """
-
+    # creates the records used by the tests
     @classmethod
     def setUpTestData(cls):
-        """
-        Create the Device hierarchy used by the tests.
-        """
-
         cls.country = Country.objects.create(name="Portugal", code="PT")
 
         cls.customer = Customer.objects.create(country=cls.country, name="aitecserv")
@@ -40,15 +31,9 @@ class MQTTServiceTests(TestCase):
             status=DeviceStatus.UNKNOWN,
         )
 
-    # Edge-device health message
 
+    # online status message updates device
     def test_online_status_message_updates_device(self):
-        """
-        Simulate:
-
-        aiaction/pt/aitecserv/office2/edge-01/health/edge-device
-        """
-
         topic = (
             "aiaction/"
             "pt/"
@@ -74,13 +59,8 @@ class MQTTServiceTests(TestCase):
 
         self.assertIsNotNone(self.device.last_seen)
 
+    # offline status message updates device
     def test_offline_status_message_updates_device(self):
-        """
-        Simulate the LWT-style offline message:
-
-        aiaction/pt/aitecserv/office2/edge-01/health/edge-device
-        """
-
         topic = (
             "aiaction/"
             "pt/"
@@ -110,15 +90,9 @@ class MQTTServiceTests(TestCase):
             ).exists()
         )
 
-    # Overall health message
 
+    # overall health message updates device
     def test_overall_health_message_updates_device(self):
-        """
-        Simulate:
-
-        aiaction/pt/aitecserv/office2/edge-01/health/overall-health
-        """
-
         topic = (
             "aiaction/"
             "pt/"
@@ -158,20 +132,14 @@ class MQTTServiceTests(TestCase):
 
         self.assertIsNotNone(self.device.last_seen)
 
-        # The nested camera list should have been provisioned/updated too.
+        # the nested camera list should have been provisioned/updated too
         camera = Camera.objects.get(device=self.device, camera_identifier="CAM-1")
 
         self.assertEqual(camera.status, CameraStatus.ONLINE)
 
-    # Unhealthy component
 
+    # overall health message creates alert for unhealthy component
     def test_overall_health_message_creates_alert_for_unhealthy_component(self):
-        """
-        A component going DOWN should create a health alert.
-
-        The device itself remains ONLINE.
-        """
-
         topic = (
             "aiaction/"
             "pt/"
@@ -198,25 +166,19 @@ class MQTTServiceTests(TestCase):
 
         self.device.refresh_from_db()
 
-        # The device is still communicating.
+        # the device is still communicating
         self.assertEqual(self.device.status, DeviceStatus.ONLINE)
 
-        # A health alert should exist.
+        # A health alert should exist
         self.assertTrue(
             DeviceAlert.objects.filter(
                 device=self.device, alert_type=AlertType.DEVICE_HEALTH, active=True
             ).exists()
         )
 
-    # Standalone component health message
 
+    # component health message updates device
     def test_component_health_message_updates_device(self):
-        """
-        Simulate:
-
-        aiaction/pt/aitecserv/office2/edge-01/health/detectorapi
-        """
-
         topic = (
             "aiaction/"
             "pt/"
@@ -243,15 +205,9 @@ class MQTTServiceTests(TestCase):
         self.assertEqual(self.device.status, DeviceStatus.ONLINE)
         self.assertEqual(self.device.component_statuses["detectorapi"]["status"], "up")
 
-    # Bulk camera health list
 
+    # health cameras message updates cameras
     def test_health_cameras_message_updates_cameras(self):
-        """
-        Simulate:
-
-        aiaction/pt/aitecserv/office2/edge-01/health/cameras
-        """
-
         topic = (
             "aiaction/" "pt/" "aitecserv/" "office2/" "edge-01/" "health/" "cameras"
         )
@@ -276,15 +232,9 @@ class MQTTServiceTests(TestCase):
 
         self.assertEqual(camera.status, CameraStatus.OFFLINE)
 
-    # Device info message
 
+    # device info message stores system info
     def test_device_info_message_stores_system_info(self):
-        """
-        Simulate:
-
-        aiaction/pt/aitecserv/office2/edge-01/info/edge-device
-        """
-
         topic = (
             "aiaction/" "pt/" "aitecserv/" "office2/" "edge-01/" "info/" "edge-device"
         )
@@ -305,12 +255,8 @@ class MQTTServiceTests(TestCase):
 
         self.assertEqual(self.device.system_info["device_os"], "Windows 10")
 
+    # device info replaces placeholder serial number
     def test_device_info_replaces_placeholder_serial_number(self):
-        """
-        While pending_review, the auto-generated "AUTO-..." serial number
-        should be replaced by the real device_id reported over MQTT.
-        """
-
         self.device.pending_review = True
         self.device.save(update_fields=["pending_review"])
 
@@ -326,9 +272,8 @@ class MQTTServiceTests(TestCase):
 
         self.assertEqual(self.device.serial_number, "DESKTOP-6F7A8IL-4c38d521021e")
 
+    # device info does not replace confirmed serial number
     def test_device_info_does_not_replace_confirmed_serial_number(self):
-        """Once a human confirms the device, MQTT must not overwrite its serial number."""
-
         self.device.pending_review = False
         self.device.save(update_fields=["pending_review"])
 
@@ -344,13 +289,8 @@ class MQTTServiceTests(TestCase):
 
         self.assertEqual(self.device.serial_number, "EDGE-001")
 
+    # overall health does not store edge device as a component
     def test_overall_health_does_not_store_edge_device_as_a_component(self):
-        """
-        The nested "edge-device" component is just the online/offline
-        status already shown by the device's status badge -- it should
-        never appear in component_statuses (no redundant component card).
-        """
-
         topic = (
             "aiaction/"
             "pt/"
@@ -375,13 +315,8 @@ class MQTTServiceTests(TestCase):
         self.assertNotIn("edge-device", self.device.component_statuses)
         self.assertIn("detectorapi", self.device.component_statuses)
 
+    # component health extracts per camera breakdown
     def test_component_health_extracts_per_camera_breakdown(self):
-        """
-        health/detectorapi's "cameras" dict (keyed by "{camera_id}_ch{n}")
-        should be extracted onto the matching Camera.health_data, for
-        display on that camera's own detail page.
-        """
-
         camera = Camera.objects.create(
             device=self.device, camera_identifier="AXIS-B8A44F957EC7", channel=1
         )
@@ -413,15 +348,9 @@ class MQTTServiceTests(TestCase):
 
         self.assertEqual(camera.health_data["detectorapi"]["stage"], "idle")
 
-    # Camera info message
 
+    # camera info message provisions camera identity
     def test_camera_info_message_provisions_camera_identity(self):
-        """
-        Simulate:
-
-        aiaction/pt/aitecserv/office2/edge-01/info/cameras
-        """
-
         topic = "aiaction/" "pt/" "aitecserv/" "office2/" "edge-01/" "info/" "cameras"
 
         payload = {
@@ -446,12 +375,8 @@ class MQTTServiceTests(TestCase):
         self.assertEqual(camera.serial_number, "B8A44F957EC7")
         self.assertEqual(camera.name, "Test Camera")
 
+    # camera info message does not overwrite confirmed camera
     def test_camera_info_message_does_not_overwrite_confirmed_camera(self):
-        """
-        Once a human confirms a camera (pending_review=False), MQTT
-        identity info must not silently rename it.
-        """
-
         camera = Camera.objects.create(
             device=self.device,
             camera_identifier="CAM-1",
@@ -478,15 +403,9 @@ class MQTTServiceTests(TestCase):
 
         self.assertEqual(camera.name, "Front Door Camera")
 
-    # Camera license message
 
+    # license message stores license data on matching camera
     def test_license_message_stores_license_data_on_matching_camera(self):
-        """
-        Simulate:
-
-        aiaction/pt/aitecserv/office2/edge-01/info/licenses
-        """
-
         camera = Camera.objects.create(
             device=self.device,
             camera_identifier="AXIS-B8A44F957EC7",
@@ -536,12 +455,8 @@ class MQTTServiceTests(TestCase):
         self.assertTrue(camera.license_data["licensed"])
         self.assertEqual(camera.license_data["days_left"], 366)
 
+    # license message skips unknown camera
     def test_license_message_skips_unknown_camera(self):
-        """
-        A license entry for a camera_id the device hasn't provisioned yet
-        (e.g. an unused "Test-1" slot) must not create a Camera record.
-        """
-
         topic = "aiaction/" "pt/" "aitecserv/" "office2/" "edge-01/" "info/" "licenses"
 
         payload = {
@@ -561,15 +476,9 @@ class MQTTServiceTests(TestCase):
             Camera.objects.filter(device=self.device, camera_identifier="Test-1").exists()
         )
 
-    # Device-level issue message
 
+    # issue message creates device error alert
     def test_issue_message_creates_device_error_alert(self):
-        """
-        Simulate:
-
-        aiaction/pt/aitecserv/office2/edge-01/issues/disk-space-low
-        """
-
         topic = (
             "aiaction/"
             "pt/"
@@ -590,20 +499,9 @@ class MQTTServiceTests(TestCase):
             ).exists()
         )
 
-    # Camera-level detection message
 
+    # detection for unknown camera is ignored
     def test_detection_for_unknown_camera_is_ignored(self):
-        """
-        A detection does NOT auto-create the camera if it doesn't exist
-        yet — it's a real-world detection, and we don't want to invent a
-        Camera record from one just to hang it off. The message should be
-        dropped (with a warning logged) and the Edge device left alone.
-
-        Example topic:
-
-        aiaction/pt/aitecserv/office2/edge-01/detections/AXIS-B8A44F957EC7/1
-        """
-
         topic = (
             "aiaction/"
             "pt/"
@@ -634,13 +532,8 @@ class MQTTServiceTests(TestCase):
         self.device.refresh_from_db()
         self.assertEqual(self.device.status, DeviceStatus.UNKNOWN)
 
+    # detection for known camera creates alert
     def test_detection_for_known_camera_creates_alert(self):
-        """
-        Same topic as above, but this time the camera already exists —
-        the detection should be recorded and the camera marked ONLINE
-        (it clearly is, since it just sent us a detection).
-        """
-
         camera = Camera.objects.create(
             device=self.device,
             camera_identifier="AXIS-B8A44F957EC7",

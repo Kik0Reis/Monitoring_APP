@@ -1,14 +1,4 @@
-"""Auto-creates Country/Customer/Location/Device records from MQTT topics.
-
-Devices are looked up by the full topic path, not a bare device_id --
-mqtt_identifier is only unique within a location, so two customers can
-both have a device named "01" by their installer.
-
-Anything auto-created here comes from untrusted network input (anyone who
-can publish to the broker triggers this), so it's saved as pending_review=True.
-It works exactly like any other record, that flag just tells the UI a human
-should confirm/rename it.
-"""
+# creates the country, customer, location, device and camera of an mqtt topic when they do not exist
 
 import logging
 
@@ -23,17 +13,8 @@ from locations.models import Location
 logger = logging.getLogger(__name__)
 
 
+# gets or creates a record that has a unique name and a unique mqtt_key
 def _resolve_by_mqtt_key(model, mqtt_key, lookup, name_field, defaults):
-    """Get-or-create for models with both a unique name and a unique mqtt_key.
-
-    A record with this name might already exist without an mqtt_key (created
-    by hand in the UI before any MQTT traffic showed up for it). Checking by
-    mqtt_key alone would insert a duplicate and crash on the name constraint,
-    so we check by name first and adopt that row instead.
-
-    `lookup` scopes the search to the parent, e.g. {"country": country}.
-    """
-
     existing = model.objects.filter(mqtt_key=mqtt_key, **lookup).first()
     if existing:
         return existing, False
@@ -50,20 +31,14 @@ def _resolve_by_mqtt_key(model, mqtt_key, lookup, name_field, defaults):
         with transaction.atomic():
             return (model.objects.create(mqtt_key=mqtt_key, **lookup, **defaults), True)
     except IntegrityError:
-        # someone else created it between our check and our insert, use theirs
+        # another process created it first, use that one
         return model.objects.get(mqtt_key=mqtt_key, **lookup), False
 
 
+# finds the device of an mqtt message, creating it when it does not exist
 def resolve_device(
     *, country_code: str, client_key: str, installation_key: str, device_id: str
 ) -> Device | None:
-    """Find/auto-create the Device an MQTT message belongs to.
-
-    Returns None if the device exists but was deliberately deactivated --
-    a disabled device shouldn't get resurrected just because MQTT traffic
-    still shows up for it.
-    """
-
     country = _resolve_country(country_code)
     customer = _resolve_customer(country, client_key)
     location = _resolve_location(customer, installation_key)
@@ -83,6 +58,7 @@ def resolve_device(
     return device
 
 
+# gets or creates the country of the topic
 def _resolve_country(country_code: str) -> Country:
     code = country_code.strip().upper()[:2]
 
@@ -96,6 +72,7 @@ def _resolve_country(country_code: str) -> Country:
     return country
 
 
+# gets or creates the customer of the topic
 def _resolve_customer(country: Country, client_key: str) -> Customer:
     key = client_key.strip()
 
@@ -117,6 +94,7 @@ def _resolve_customer(country: Country, client_key: str) -> Customer:
     return customer
 
 
+# gets or creates the location of the topic
 def _resolve_location(customer: Customer, installation_key: str) -> Location:
     key = installation_key.strip()
 
@@ -138,6 +116,7 @@ def _resolve_location(customer: Customer, installation_key: str) -> Location:
     return location
 
 
+# gets or creates the device of the topic
 def _resolve_device(location: Location, device_id: str) -> Device:
     identifier = device_id.strip()
 
@@ -147,18 +126,14 @@ def _resolve_device(location: Location, device_id: str) -> Device:
             mqtt_identifier=identifier,
             defaults={
                 "name": identifier,
-                # MQTT has no serial number -- this placeholder is unique
-                # (location.id is global) and obviously fake, easy to spot
-                # and replace with the real one later
+                # mqtt has no serial number, so use a unique placeholder that is easy to find and replace
                 "serial_number": f"AUTO-{location.id}-{identifier}",
                 "device_type": DeviceType.EDGE,
                 "pending_review": True,
             },
         )
     except IntegrityError:
-        # a manually-created device at this location already has this name,
-        # even though its mqtt_identifier differs -- fall back to it instead
-        # of crashing MQTT processing
+        # a manually created device with this name already exists here, use it instead of failing
         device = Device.objects.get(location=location, name=identifier)
         created = False
 
@@ -172,15 +147,10 @@ def _resolve_device(location: Location, device_id: str) -> Device:
     return device
 
 
+# finds the camera of an entry in the device camera list, creating it when needed
 def resolve_camera(
     device: Device, camera_identifier: str, name: str | None = None, channel: int = 1
 ) -> Camera:
-    """Find/auto-create the Camera for an entry in a device's cameras list.
-
-    Scoped to `device` -- camera_identifier is only unique per-device, so
-    there's no cross-customer collision risk like there was for devices.
-    """
-
     identifier = camera_identifier.strip()
 
     camera, created = Camera.objects.get_or_create(

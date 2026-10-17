@@ -4,14 +4,11 @@ from django.core.management.base import BaseCommand
 from monitoring.services.retention import delete_old_resolved_alerts
 
 
+# management command that deletes old resolved alerts
 class Command(BaseCommand):
-    help = (
-        "Delete resolved DeviceAlert/CameraAlert rows (active=False) older "
-        "than the configured retention window. Active alerts are never "
-        "touched. Runs automatically inside heartbeat_worker, but can also "
-        "be run on demand or from a cron job / scheduled task."
-    )
+    help = "Deletes resolved alerts older than the retention days, active alerts are never touched."
 
+    # defines the --days option
     def add_arguments(self, parser):
         parser.add_argument(
             "--days",
@@ -23,6 +20,7 @@ class Command(BaseCommand):
             ),
         )
 
+    # deletes the old resolved alerts and prints how many were deleted
     def handle(self, *args, **options):
         retention_days = options["days"] or settings.ALERT_RETENTION_DAYS
 

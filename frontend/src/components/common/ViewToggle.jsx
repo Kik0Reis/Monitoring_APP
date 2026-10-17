@@ -2,15 +2,8 @@ import { useNavigate } from "react-router-dom";
 
 import "./view-toggle.css";
 
-/**
- * Lets the person switch between the two ways of browsing the
- * Country > Customer > Location > Device > Camera hierarchy:
- *   - "tree": Monitor > Views, everything expands inline on one page.
- *   - "drilldown": the original Countries/Clients/Locations list pages,
- *     navigating one level at a time.
- * Rendered in the page header on both sides so either one is always a
- * click away.
- */
+// switches between the two ways of browsing the hierarchy
+// tree view: everything opens on one page (Monitor > Views), drill down: one list page per level
 function ViewToggle({ active }) {
   const navigate = useNavigate();
 

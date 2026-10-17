@@ -1,5 +1,7 @@
-const PAGE_SIZE = 10; // must match backend REST_FRAMEWORK.PAGE_SIZE
+// must match REST_FRAMEWORK PAGE_SIZE in the backend settings
+const PAGE_SIZE = 10;
 
+// first, previous, next and last page buttons with the "Showing 1-10 of 42" text, hidden when there is only one page
 function Pagination({ page, setPage, count, hasNext, hasPrevious }) {
   if (count <= PAGE_SIZE) {
     return null;
@@ -20,10 +22,7 @@ function Pagination({ page, setPage, count, hasNext, hasPrevious }) {
           «
         </button>
 
-        <button
-          onClick={() => setPage((p) => Math.max(1, p - 1))}
-          disabled={!hasPrevious}
-        >
+        <button onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={!hasPrevious}>
           ‹
         </button>
 
@@ -31,10 +30,7 @@ function Pagination({ page, setPage, count, hasNext, hasPrevious }) {
           {page} / {totalPages}
         </span>
 
-        <button
-          onClick={() => setPage((p) => p + 1)}
-          disabled={!hasNext}
-        >
+        <button onClick={() => setPage((current) => current + 1)} disabled={!hasNext}>
           ›
         </button>
 

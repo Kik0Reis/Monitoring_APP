@@ -1,6 +1,4 @@
-"""
-Tests for monitoring/services/retention.py.
-"""
+# tests for the cleanup functions in retention.py
 
 from datetime import timedelta
 
@@ -15,8 +13,10 @@ from monitoring.models import DeviceHeartbeat
 from monitoring.services.retention import delete_old_heartbeats
 
 
+# tests for delete old heartbeats
 class DeleteOldHeartbeatsTests(TestCase):
 
+    # creates the records used by the tests
     @classmethod
     def setUpTestData(cls):
         country = Country.objects.create(name="Portugal", code="PT")
@@ -32,13 +32,15 @@ class DeleteOldHeartbeatsTests(TestCase):
             status=DeviceStatus.UNKNOWN,
         )
 
+    # creates a heartbeat for the tests
     def _create_heartbeat(self, received_at):
         heartbeat = DeviceHeartbeat.objects.create(device=self.device)
         # received_at is auto_now_add, so it has to be overwritten after
-        # creation with a plain queryset update.
+        # creation with a plain queryset update
         DeviceHeartbeat.objects.filter(pk=heartbeat.pk).update(received_at=received_at)
         return heartbeat
 
+    # deletes only heartbeats older than retention window
     def test_deletes_only_heartbeats_older_than_retention_window(self):
         now = timezone.now()
 
@@ -51,6 +53,7 @@ class DeleteOldHeartbeatsTests(TestCase):
         self.assertFalse(DeviceHeartbeat.objects.filter(pk=old_heartbeat.pk).exists())
         self.assertTrue(DeviceHeartbeat.objects.filter(pk=recent_heartbeat.pk).exists())
 
+    # returns zero when nothing is old enough
     def test_returns_zero_when_nothing_is_old_enough(self):
         self._create_heartbeat(timezone.now())
 
@@ -59,6 +62,7 @@ class DeleteOldHeartbeatsTests(TestCase):
         self.assertEqual(deleted_count, 0)
         self.assertEqual(DeviceHeartbeat.objects.count(), 1)
 
+    # deletes across multiple batches
     def test_deletes_across_multiple_batches(self):
         now = timezone.now()
 

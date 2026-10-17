@@ -1,8 +1,4 @@
-"""Checks for stale last_seen timestamps and flips devices/cameras offline.
-
-MQTT processing updates last_seen every time a device/camera reports in --
-this is the other half, catching the ones that stopped.
-"""
+# marks devices and cameras offline when their last_seen is too old
 
 from datetime import timedelta
 
@@ -17,12 +13,11 @@ from monitoring.services.device_health import create_offline_alert, update_devic
 DEFAULT_HEARTBEAT_TIMEOUT_SECONDS = 60
 
 
+# marks one device offline and creates the alert when its heartbeat expired
 @transaction.atomic
 def check_device_timeout(
     device: Device, timeout_seconds: int = DEFAULT_HEARTBEAT_TIMEOUT_SECONDS, now=None
 ) -> Device:
-    """Mark one device OFFLINE (and raise an alert) once its heartbeat has expired."""
-
     if now is None:
         now = timezone.now()
 
@@ -43,12 +38,11 @@ def check_device_timeout(
     return device
 
 
+# marks one camera offline when its heartbeat expired
 @transaction.atomic
 def check_camera_timeout(
     camera: Camera, timeout_seconds: int = DEFAULT_HEARTBEAT_TIMEOUT_SECONDS, now=None
 ) -> Camera:
-    """Mark a single camera OFFLINE if its last heartbeat has expired."""
-
     if now is None:
         now = timezone.now()
 
@@ -69,18 +63,16 @@ def check_camera_timeout(
     return camera
 
 
+# checks every active device and returns how many are offline
 def check_all_device_timeouts(
     timeout_seconds: int = DEFAULT_HEARTBEAT_TIMEOUT_SECONDS, now=None
 ) -> int:
-    """Sweep every active device for expired heartbeats; return how many are offline."""
-
     if now is None:
         now = timezone.now()
 
     offline_count = 0
 
-    # only the columns we need -- devices can carry a large health_data/
-    # component_statuses JSON blob we don't want on every sweep
+    # load only the needed columns, devices can hold large json fields
     devices = Device.objects.filter(active=True).only(
         "id", "last_seen", "status", "name"
     )
@@ -97,11 +89,10 @@ def check_all_device_timeouts(
     return offline_count
 
 
+# checks every active camera and returns how many are offline
 def check_all_camera_timeouts(
     timeout_seconds: int = DEFAULT_HEARTBEAT_TIMEOUT_SECONDS, now=None
 ) -> int:
-    """Sweep every active camera for expired heartbeats; return how many are offline."""
-
     if now is None:
         now = timezone.now()
 
@@ -123,11 +114,10 @@ def check_all_camera_timeouts(
     return offline_count
 
 
+# runs the device and camera checks together, called by heartbeat_worker
 def check_all_heartbeats(
     timeout_seconds: int = DEFAULT_HEARTBEAT_TIMEOUT_SECONDS, now=None
 ) -> dict[str, int]:
-    """Run the device and camera timeout sweeps together — what heartbeat_worker calls."""
-
     if now is None:
         now = timezone.now()
 

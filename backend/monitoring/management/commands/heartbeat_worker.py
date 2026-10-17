@@ -16,13 +16,11 @@ from monitoring.services.retention import (
 )
 
 
+# management command that runs the heartbeat checks and the cleanups in a loop
 class Command(BaseCommand):
-    help = (
-        "Long-running worker that continuously monitors Edge devices and "
-        "cameras for missed heartbeats, and periodically prunes old "
-        "heartbeat history from the database."
-    )
+    help = "Runs forever: marks devices and cameras offline on missed heartbeats and cleans old data."
 
+    # defines the timeout, interval and cleanup interval options
     def add_arguments(self, parser):
         parser.add_argument(
             "--timeout",
@@ -40,6 +38,7 @@ class Command(BaseCommand):
             help="Hours between old-heartbeat cleanup runs.",
         )
 
+    # runs the heartbeat checks every interval and the cleanups every cleanup interval
     def handle(self, *args, **options):
         timeout_seconds = options["timeout"]
         interval_seconds = options["interval"]
@@ -58,10 +57,7 @@ class Command(BaseCommand):
             )
         )
 
-        # Run an initial cleanup on startup, then track when the next one
-        # is due. A single restart-loop process is enough here because
-        # this command already runs as a permanent, always-on service
-        # (see docker-compose.yml) — no separate cron/scheduler needed.
+        # clean up once on startup, then again every cleanup interval
         next_cleanup_at = timezone.now()
 
         while True:

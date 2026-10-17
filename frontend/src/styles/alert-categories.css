@@ -1,0 +1,12 @@
+.entity-alert-row {
+  position: relative;
+}
+
+.entity-alert-row .alert-row-resolve {
+  opacity: 0;
+}
+
+.entity-alert-row:hover .alert-row-resolve {
+  opacity: 1;
+}
+

@@ -4,14 +4,8 @@ import { ChevronDown } from "lucide-react";
 
 import "./multi-select.css";
 
-/**
- * Dropdown list where you can tick more than one option. `value` is the
- * array of selected options ([] = nothing selected = no filtering).
- *
- * The list is drawn in a portal with position: fixed, so it isn't clipped
- * by the scrolling table it sits in. It closes on outside click, Escape,
- * resize, or when something outside it scrolls.
- */
+// dropdown list where more than one option can be ticked, value is the array of selected options
+// the list is drawn in a portal with fixed position so the scrolling table does not cut it
 function MultiSelect({ options, value, onChange, ariaLabel, allLabel = "All" }) {
   const selected = value ?? [];
 
@@ -23,6 +17,7 @@ function MultiSelect({ options, value, onChange, ariaLabel, allLabel = "All" }) 
   useEffect(() => {
     if (!open) return undefined;
 
+    // closes the list on a click outside, escape, resize or a scroll outside it
     function handleEvent(event) {
       const inside =
         panelRef.current?.contains(event.target) || buttonRef.current?.contains(event.target);
@@ -46,6 +41,7 @@ function MultiSelect({ options, value, onChange, ariaLabel, allLabel = "All" }) 
     };
   }, [open]);
 
+  // opens the list under the button, or closes it when it is open
   function toggleOpen() {
     if (open) {
       setOpen(false);
@@ -57,6 +53,7 @@ function MultiSelect({ options, value, onChange, ariaLabel, allLabel = "All" }) 
     setOpen(true);
   }
 
+  // ticks or unticks one option
   function toggleOption(option) {
     onChange(
       selected.includes(option)

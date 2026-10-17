@@ -1,4 +1,4 @@
-/* Page-specific tweaks only — shared styles live in src/styles/common.css. */
+/* styles that only the alerts page uses */
 
 .alerts-filter-toggle {
   display: flex;
@@ -75,7 +75,7 @@
   font-weight: var(--weight-semibold);
 }
 
-/* ---- Alerts table (sortable headers + filter row) ---- */
+/* alerts table: sortable headers and filter row */
 
 .alerts-table-scroll {
   max-height: calc(100vh - 340px);
@@ -190,7 +190,7 @@
   color: var(--color-ink);
 }
 
-/* resolve button is hidden until the row is hovered (see common.css) */
+/* the resolve button only shows when the row is hovered */
 .alerts-table tbody tr:hover .alert-row-resolve:not(:disabled) {
   opacity: 1;
 }

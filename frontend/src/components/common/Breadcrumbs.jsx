@@ -1,13 +1,7 @@
 import { Link } from "react-router-dom";
 
-/**
- * Renders the Country > Customer > Location > Device > Camera trail.
- *
- * `trail` is the `breadcrumb` array returned directly by the API
- * (see backend serializers' get_breadcrumb methods), so every detail
- * page gets correct breadcrumbs even on a hard page refresh, without
- * extra API calls to walk back up the hierarchy.
- */
+// the trail home / country / customer / location / device / camera, every part is a link except the last
+// trail comes straight from the breadcrumb field of the api, trailingLabel adds a final text that is not a link
 function Breadcrumbs({ trail, trailingLabel }) {
   if (!trail || trail.length === 0) {
     return null;
@@ -27,9 +21,7 @@ function Breadcrumbs({ trail, trailingLabel }) {
             <span className="breadcrumb-separator">/</span>
 
             {isLast ? (
-              <span className="breadcrumb-crumb breadcrumb-current">
-                {crumb.name}
-              </span>
+              <span className="breadcrumb-crumb breadcrumb-current">{crumb.name}</span>
             ) : (
               <Link to={crumb.path} className="breadcrumb-crumb">
                 {crumb.name}
@@ -42,9 +34,7 @@ function Breadcrumbs({ trail, trailingLabel }) {
       {trailingLabel && (
         <span className="breadcrumb-item">
           <span className="breadcrumb-separator">/</span>
-          <span className="breadcrumb-crumb breadcrumb-current">
-            {trailingLabel}
-          </span>
+          <span className="breadcrumb-crumb breadcrumb-current">{trailingLabel}</span>
         </span>
       )}
     </nav>

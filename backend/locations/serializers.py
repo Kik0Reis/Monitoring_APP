@@ -1,32 +1,24 @@
 from rest_framework import serializers
 
+from core.breadcrumbs import location_breadcrumb
+from core.serializer_helpers import annotated_count, clean_name
 from customers.models import Customer
 from customers.serializers import CustomerSummarySerializer
 
 from .models import Location
 
 
+# validates and converts location records for the api
 class LocationSerializer(serializers.ModelSerializer):
-    """Validates and (de)serializes Location records for the API."""
-
-    # Nested customer information returned in responses.
     customer = CustomerSummarySerializer(read_only=True)
-
-    # Customer ID used when creating or updating a location.
     customer_id = serializers.PrimaryKeyRelatedField(
         queryset=Customer.objects.all(), source="customer", write_only=True
     )
-
-    # Number of devices that belong to this location.
     devices_count = serializers.SerializerMethodField()
-
-    # Breadcrumb trail used by the frontend to render drilldown
-    # navigation (Country -> Customer -> Location).
     breadcrumb = serializers.SerializerMethodField()
 
     class Meta:
         model = Location
-
         fields = (
             "id",
             "customer",
@@ -40,76 +32,26 @@ class LocationSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         )
-
         read_only_fields = ("id", "pending_review", "created_at", "updated_at")
 
+    # returns how many devices belong to the location
     def get_devices_count(self, obj):
-        annotated = getattr(obj, "devices_count_annotation", None)
+        return annotated_count(obj, "devices_count_annotation", "devices")
 
-        if annotated is not None:
-            return annotated
-
-        return obj.devices.count()
-
+    # returns the navigation trail country > customer > location
     def get_breadcrumb(self, obj):
-        customer = obj.customer
+        return location_breadcrumb(obj)
 
-        trail = []
-
-        # customer.country isn't always select_related()'d by the caller,
-        # so this can trigger an extra query — acceptable here since
-        # breadcrumbs are only built for single-object responses.
-        country = customer.country
-
-        trail.append(
-            {
-                "type": "country",
-                "id": country.id,
-                "name": country.name,
-                "path": f"/countries/{country.id}",
-            }
-        )
-
-        trail.append(
-            {
-                "type": "customer",
-                "id": customer.id,
-                "name": customer.name,
-                "path": f"/clients/{customer.id}",
-            }
-        )
-
-        trail.append(
-            {
-                "type": "location",
-                "id": obj.id,
-                "name": obj.name,
-                "path": f"/locations/{obj.id}",
-            }
-        )
-
-        return trail
-
+    # trims the name and requires at least 2 characters
     def validate_name(self, value):
-        """Trim whitespace and require at least 2 characters."""
+        return clean_name(value, "Location name")
 
-        value = value.strip()
-
-        if len(value) < 2:
-            raise serializers.ValidationError(
-                "Location name must contain at least 2 characters."
-            )
-
-        return value
-
+    # trims the description
     def validate_description(self, value):
-        """Trim whitespace from the description."""
-
         return value.strip()
 
+    # does not allow a location to be assigned to an inactive customer
     def validate(self, attrs):
-        """Reject locations being assigned to an inactive customer."""
-
         customer = attrs.get("customer")
 
         if customer and not customer.active:
@@ -120,9 +62,8 @@ class LocationSerializer(serializers.ModelSerializer):
         return attrs
 
 
+# minimal location fields to nest inside other serializers
 class LocationSummarySerializer(serializers.ModelSerializer):
-    """Minimal Location fields, for nesting inside other serializers."""
-
     class Meta:
         model = Location
         fields = ("id", "name")

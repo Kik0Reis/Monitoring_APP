@@ -1,3 +1,4 @@
+// turns a date into "just now", "12s ago" or "3m ago"
 function formatRelativeTime(date) {
   if (!date) {
     return null;
@@ -5,24 +6,13 @@ function formatRelativeTime(date) {
 
   const seconds = Math.round((Date.now() - date.getTime()) / 1000);
 
-  if (seconds < 5) {
-    return "just now";
-  }
+  if (seconds < 5) return "just now";
+  if (seconds < 60) return `${seconds}s ago`;
 
-  if (seconds < 60) {
-    return `${seconds}s ago`;
-  }
-
-  const minutes = Math.round(seconds / 60);
-
-  return `${minutes}m ago`;
+  return `${Math.round(seconds / 60)}m ago`;
 }
 
-/**
- * Shared page header: eyebrow + title on the left, optional "last
- * updated" indicator + action buttons on the right. Used by every page
- * so title size/weight/spacing is identical everywhere.
- */
+// header of every page: eyebrow and title on the left, refresh indicator and the buttons given as children on the right
 function PageHeader({ eyebrow, title, lastUpdated, refreshing, onRefresh, children }) {
   return (
     <header className="page-header">
@@ -41,11 +31,7 @@ function PageHeader({ eyebrow, title, lastUpdated, refreshing, onRefresh, childr
             title="Refresh now"
           >
             <span className={`refresh-dot ${refreshing ? "spinning" : ""}`} />
-            {refreshing
-              ? "Refreshing..."
-              : lastUpdated
-              ? `Updated ${formatRelativeTime(lastUpdated)}`
-              : "Refresh"}
+            {refreshing ? "Refreshing..." : lastUpdated ? `Updated ${formatRelativeTime(lastUpdated)}` : "Refresh"}
           </button>
         )}
 

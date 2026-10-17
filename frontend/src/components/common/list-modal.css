@@ -1,8 +1,4 @@
-/* ============================================================
-   ListModal: centered popup for a dashboard panel's full list.
-   Same overlay/centering pattern as crud-modal.css, but sized
-   for a scrollable list rather than a form.
-   ============================================================ */
+/* popup with a list, opened from the dashboard panels */
 
 .list-modal-overlay {
   position: fixed;

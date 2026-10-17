@@ -1,11 +1,5 @@
-/**
- * Shown on a Device/Camera when the last MQTT reconciliation cycle
- * didn't see it on the broker at all (Device.on_mqtt / Camera.on_mqtt
- * === false). Unlike the ONLINE/OFFLINE status badge, this is never
- * time-based -- it only appears once a full reconcile cycle genuinely
- * couldn't find it, which is what makes it safe to delete with
- * confidence.
- */
+// shown on a device or camera that the last mqtt reconciliation did not find on the broker
+// unlike online and offline this is never based on time, so it is safe to delete the record when it shows
 function NotOnMqttBadge() {
   return <span className="not-on-mqtt-badge">Not on MQTT</span>;
 }

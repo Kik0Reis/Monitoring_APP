@@ -1,52 +1,41 @@
-/**
- * Renders one form field inside a CrudModal, based on a small config
- * object instead of hand-written markup repeated on every page.
- *
- * field: {
- *   name, label, type: 'text'|'textarea'|'select'|'checkbox'|'number'|'password',
- *   placeholder, options?: [{value, label}], maxLength?, min?, max?, hidden?,
- *   hint? (short note rendered under the field, e.g. "Restart X to apply")
- * }
- */
+// label, input and optional hint of one form field
+function FieldShell({ field, id, hint, children, labelFirst = true }) {
+  return (
+    <div className={`form-field ${field.type === "checkbox" ? "checkbox-field" : ""}`}>
+      {labelFirst && <label htmlFor={id}>{field.label}</label>}
+      {children}
+      {hint}
+    </div>
+  );
+}
+
+// one field of a form modal, drawn from a small config object
+// field: { name, label, type (text, textarea, select, checkbox, number, password), placeholder,
+//          options [{ value, label }], maxLength, min, max, hidden, hint }
 function FormField({ field, value, onChange, disabled }) {
   if (field.hidden) {
     return null;
   }
 
   const id = `field-${field.name}`;
-
   const hint = field.hint ? <p className="form-field-hint">{field.hint}</p> : null;
+  const common = { id, name: field.name, onChange, disabled };
 
   if (field.type === "checkbox") {
     return (
-      <div className="form-field checkbox-field">
+      <FieldShell field={field} id={id} hint={hint} labelFirst={false}>
         <label htmlFor={id}>
-          <input
-            id={id}
-            name={field.name}
-            type="checkbox"
-            checked={Boolean(value)}
-            onChange={onChange}
-            disabled={disabled}
-          />
+          <input {...common} type="checkbox" checked={Boolean(value)} />
           {field.label}
         </label>
-        {hint}
-      </div>
+      </FieldShell>
     );
   }
 
   if (field.type === "select") {
     return (
-      <div className="form-field">
-        <label htmlFor={id}>{field.label}</label>
-        <select
-          id={id}
-          name={field.name}
-          value={value ?? ""}
-          onChange={onChange}
-          disabled={disabled}
-        >
+      <FieldShell field={field} id={id} hint={hint}>
+        <select {...common} value={value ?? ""}>
           <option value="">{field.placeholder || `Select ${field.label.toLowerCase()}`}</option>
           {(field.options || []).map((option) => (
             <option key={option.value} value={option.value}>
@@ -54,65 +43,44 @@ function FormField({ field, value, onChange, disabled }) {
             </option>
           ))}
         </select>
-        {hint}
-      </div>
+      </FieldShell>
     );
   }
 
   if (field.type === "textarea") {
     return (
-      <div className="form-field">
-        <label htmlFor={id}>{field.label}</label>
-        <textarea
-          id={id}
-          name={field.name}
-          value={value ?? ""}
-          onChange={onChange}
-          placeholder={field.placeholder}
-          disabled={disabled}
-          rows={3}
-        />
-        {hint}
-      </div>
+      <FieldShell field={field} id={id} hint={hint}>
+        <textarea {...common} value={value ?? ""} placeholder={field.placeholder} rows={3} />
+      </FieldShell>
     );
   }
 
   if (field.type === "number") {
     return (
-      <div className="form-field">
-        <label htmlFor={id}>{field.label}</label>
+      <FieldShell field={field} id={id} hint={hint}>
         <input
-          id={id}
-          name={field.name}
+          {...common}
           type="number"
           value={value ?? ""}
-          onChange={onChange}
           placeholder={field.placeholder}
           min={field.min}
           max={field.max}
-          disabled={disabled}
         />
-        {hint}
-      </div>
+      </FieldShell>
     );
   }
 
   return (
-    <div className="form-field">
-      <label htmlFor={id}>{field.label}</label>
+    <FieldShell field={field} id={id} hint={hint}>
       <input
-        id={id}
-        name={field.name}
+        {...common}
         type={field.type === "password" ? "password" : "text"}
         value={value ?? ""}
-        onChange={onChange}
         placeholder={field.placeholder}
         maxLength={field.maxLength}
-        disabled={disabled}
         autoComplete={field.type === "password" ? "new-password" : undefined}
       />
-      {hint}
-    </div>
+    </FieldShell>
   );
 }
 

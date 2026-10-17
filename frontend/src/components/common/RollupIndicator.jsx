@@ -1,26 +1,8 @@
+import { ROLLUP_LABELS, rollupTone } from "../../utils/rollup";
 import "./rollup-indicator.css";
 
-/**
- * The tree view's per-node signals, for drill-down pages: one status dot
- * (red = something in this branch is offline, amber = active error alert in
- * this branch, green = all clear -- red wins over amber) plus the recent
- * detections count. `node` comes from useMonitorRollup().get(type, id).
- *
- * showLabel adds a sentence next to the dot -- used in page headers; table
- * rows just show the dot + count to stay compact.
- */
-function rollupTone(node) {
-  if (node.system_check === "red") return "critical";
-  if (node.has_alerts) return "warning";
-  return "ok";
-}
-
-const LABELS = {
-  critical: "Offline somewhere in this branch",
-  warning: "Active error alert in this branch",
-  ok: "All clear",
-};
-
+// the status dot and the recent detections count of a tree node, shown on the drill down pages
+// node comes from useMonitorRollup().get(type, id), showLabel adds a sentence next to the dot (used in page headers)
 function RollupIndicator({ node, showLabel = false }) {
   if (!node) return null;
 
@@ -28,9 +10,9 @@ function RollupIndicator({ node, showLabel = false }) {
 
   return (
     <span className="rollup-indicator">
-      <span className="rollup-status" title={LABELS[tone]}>
+      <span className="rollup-status" title={ROLLUP_LABELS[tone]}>
         <span className={`rollup-dot rollup-dot-${tone}`} />
-        {showLabel && <span className={`rollup-label rollup-label-${tone}`}>{LABELS[tone]}</span>}
+        {showLabel && <span className={`rollup-label rollup-label-${tone}`}>{ROLLUP_LABELS[tone]}</span>}
       </span>
 
       {node.detections_count > 0 && (

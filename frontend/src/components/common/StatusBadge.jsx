@@ -1,19 +1,14 @@
-/**
- * Renders a small colored dot + label for any status value
- * (device status, camera status, location health, alert severity...).
- *
- * Having exactly one implementation of this (instead of a slightly
- * different status-dot per page) is what keeps status colors/sizes
- * consistent across the whole app.
- */
+// lowercases a status so it matches the css class, an empty status is unknown
 function normalize(status) {
   return String(status ?? "unknown").toLowerCase();
 }
 
+// small coloured dot for a status (online, offline, unknown, warning, critical, info, active)
 export function StatusDot({ status }) {
   return <span className={`status-dot status-dot-${normalize(status)}`} />;
 }
 
+// the text shown when a badge is given no label
 const DEFAULT_LABELS = {
   online: "Online",
   offline: "Offline",
@@ -22,9 +17,9 @@ const DEFAULT_LABELS = {
   critical: "Critical",
   info: "Info",
   active: "Active",
-  inactive: "Inactive",
 };
 
+// coloured dot and label for any status, this is the only status badge of the app so the colours stay the same everywhere
 function StatusBadge({ status, label }) {
   const normalized = normalize(status);
 
